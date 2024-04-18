@@ -52,7 +52,8 @@ enum PrimitiveType
     DATA_CFM = 6,
     DATA_IND = 7,
     SET_CFM = 8,
-    GET_CFM = 9
+    GET_CFM = 9,
+    ORPHAN_IND = 10
 };
 
 class Packet;
@@ -125,6 +126,7 @@ class UartLrWpanMac : public LrWpanMacBase
     void DataIndication();
     void SetConfirm();
     void GetConfirm();
+    void OrphanIndication();
 
     boost::asio::io_service m_ioService;
     boost::asio::serial_port m_serial;

@@ -300,6 +300,28 @@ void
 UartLrWpanMac::MlmeOrphanResponse(MlmeOrphanResponseParams params)
 {
     NS_LOG_FUNCTION(this);
+    std::vector<uint8_t> dataBytes;
+
+    Uint8ToBytes(dataBytes, 0xAA); // Begin of data 0xAA
+    Uint8ToBytes(dataBytes, 12);   // primitive type
+     // Parameters size = 11 bytes
+    // Orphan Address (8) + ShortAddress (2) + AssociatedMember (1)
+    Uint8ToBytes(dataBytes, 11);
+    Uint64ToBytes(dataBytes, params.m_orphanAddr.ConvertToInt());
+    Uint16ToBytes(dataBytes, params.m_shortAddr.ConvertToInt());
+    Uint8ToBytes(dataBytes, params.m_assocMember);
+
+    try
+    {
+        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        //std::cout << "write without issues (AssociationResponse)\n";
+    }
+    catch (const boost::system::system_error& e)
+    {
+        // NS_LOG_ABORT("Serial communication error: " << e.what());
+        // std::cerr << "Error: " << e.what() << std::endl;
+        std::cout << "problems while writing (OrphanResponse)\n";
+    }
 }
 
 void
@@ -627,6 +649,9 @@ UartLrWpanMac::ProcessData()
     case GET_CFM:
         GetConfirm();
         break;
+    case ORPHAN_IND:
+       OrphanIndication();
+       break;
     default:
         std::cout << "Unknown Primitive with code " << static_cast<uint32_t>(m_rxPrimitiveType)
                   << " received \n";
@@ -884,6 +909,19 @@ UartLrWpanMac::GetConfirm()
         }
 
         m_mlmeGetConfirmCallback(status, id, pibAttr);
+    }
+}
+
+void
+UartLrWpanMac::OrphanIndication()
+{
+    if (!m_mlmeOrphanIndicationCallback.IsNull())
+    {
+        MlmeOrphanIndicationParams params;
+        uint8_t pos = 0;
+        params.m_orphanAddr = BytesToUint64(m_rxData, pos);
+        // TODO: Add security parameters when supported
+        m_mlmeOrphanIndicationCallback(params);
     }
 }
 
