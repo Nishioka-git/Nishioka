@@ -30,6 +30,9 @@ namespace ns3
 
 class Node;
 
+namespace uartnetdevice
+{
+
 class UartNetDevice : public NetDevice
 {
   public:
@@ -145,6 +148,7 @@ class UartNetDevice : public NetDevice
     ReceiveCallback m_receiveCallback;
 };
 
+} // namespace uartnetdevice
 } // namespace ns3
 
 #endif /* UART_NET_DEVICE_H */

@@ -30,9 +30,10 @@
 
 namespace ns3
 {
+namespace uartnetdevice
+{
 
 NS_LOG_COMPONENT_DEFINE("UartNetDevice");
-
 NS_OBJECT_ENSURE_REGISTERED(UartNetDevice);
 
 TypeId
@@ -288,4 +289,5 @@ UartNetDevice::SupportsSendFrom() const
     return false;
 }
 
+} // namespace uartnetdevice
 } // namespace ns3

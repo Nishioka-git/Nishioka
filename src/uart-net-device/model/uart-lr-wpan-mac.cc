@@ -22,7 +22,11 @@
 
 #include <ns3/log.h>
 
+using namespace ns3::lrwpan;
+
 namespace ns3
+{
+namespace uartnetdevice
 {
 
 NS_LOG_COMPONENT_DEFINE("UartLrWpanMac");
@@ -337,8 +341,8 @@ UartLrWpanMac::MlmePollRequest(MlmePollRequestParams params)
 }
 
 void
-UartLrWpanMac::MlmeSetRequest(LrWpanMacPibAttributeIdentifier id,
-                              Ptr<LrWpanMacPibAttributes> attribute)
+UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id,
+                              Ptr<MacPibAttributes> attribute)
 {
     NS_LOG_FUNCTION(this);
     std::vector<uint8_t> dataBytes;
@@ -349,22 +353,22 @@ UartLrWpanMac::MlmeSetRequest(LrWpanMacPibAttributeIdentifier id,
     // attribute id(1) + parameter size (variable)
     switch (id)
     {
-    case LrWpanMacPibAttributeIdentifier::macPanId:
+    case MacPibAttributeIdentifier::macPanId:
         Uint8ToBytes(dataBytes, 3); // Size: id(1) + macPanId (2)
-        Uint8ToBytes(dataBytes, LrWpanMacPibAttributeIdentifier::macPanId);
+        Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::macPanId);
         Uint16ToBytes(dataBytes, attribute->macPanId);
         break;
-    case LrWpanMacPibAttributeIdentifier::macShortAddress:
+    case MacPibAttributeIdentifier::macShortAddress:
         Uint8ToBytes(dataBytes, 3); // Size: id(1) + macShortAddr (2)
-        Uint8ToBytes(dataBytes, LrWpanMacPibAttributeIdentifier::macShortAddress);
+        Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::macShortAddress);
         Uint16ToBytes(dataBytes, attribute->macShortAddress.ConvertToInt());
         break;
-    case LrWpanMacPibAttributeIdentifier::macBeaconPayloadLength:
+    case MacPibAttributeIdentifier::macBeaconPayloadLength:
         Uint8ToBytes(dataBytes, 2); // Size: id(1) + beaconPayloadLength (1)
-        Uint8ToBytes(dataBytes, LrWpanMacPibAttributeIdentifier::macBeaconPayloadLength);
+        Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::macBeaconPayloadLength);
         Uint8ToBytes(dataBytes, attribute->macBeaconPayloadLength);
         break;
-    case LrWpanMacPibAttributeIdentifier::macBeaconPayload: {
+    case MacPibAttributeIdentifier::macBeaconPayload: {
         /* TODO
         uint32_t payloadSize = attribute->macBeaconPayload->GetSize();
         uint8_t buffer[payloadSize];
@@ -400,7 +404,7 @@ UartLrWpanMac::MlmeSetRequest(LrWpanMacPibAttributeIdentifier id,
 }
 
 void
-UartLrWpanMac::MlmeGetRequest(LrWpanMacPibAttributeIdentifier id)
+UartLrWpanMac::MlmeGetRequest(MacPibAttributeIdentifier id)
 {
     NS_LOG_FUNCTION(this);
     std::vector<uint8_t> dataBytes;
@@ -667,14 +671,14 @@ UartLrWpanMac::ScanConfirm()
     uint8_t pos = 0;
     MlmeScanConfirmParams params;
 
-    params.m_status = static_cast<LrWpanMacStatus>(BytesToUint8(m_rxData, pos));
-    params.m_scanType = static_cast<LrWpanMlmeScanType>(BytesToUint8(m_rxData, pos));
+    params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
+    params.m_scanType = static_cast<MlmeScanType>(BytesToUint8(m_rxData, pos));
 
     // params.m_unscannedCh = BytesToUint32(2, m_rxData); //TODO
     BytesToUint32(m_rxData, pos);
     params.m_resultListSize = BytesToUint8(m_rxData, pos);
 
-    if (params.m_status == LrWpanMacStatus::SUCCESS)
+    if (params.m_status == MacStatus::SUCCESS)
     {
         if (params.m_scanType == MLMESCAN_ED)
         {
@@ -694,7 +698,7 @@ UartLrWpanMac::ScanConfirm()
             {
                 PanDescriptor panDescriptor;
                 panDescriptor.m_coorAddrMode =
-                    static_cast<LrWpanAddressMode>(BytesToUint8(m_rxData, pos));
+                    static_cast<lrwpan::AddressMode>(BytesToUint8(m_rxData, pos));
 
                 panDescriptor.m_coorPanId = BytesToUint16(m_rxData, pos);
 
@@ -734,7 +738,7 @@ UartLrWpanMac::StartConfirm()
     {
         uint8_t pos = 0;
         MlmeStartConfirmParams params;
-        params.m_status = static_cast<LrWpanMacStatus>(BytesToUint8(m_rxData, pos));
+        params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
         m_mlmeStartConfirmCallback(params);
     }
 }
@@ -782,7 +786,7 @@ UartLrWpanMac::CommStatusIndication()
             params.m_dstShortAddr = BytesToUint16(m_rxData, pos);
         }
 
-        params.m_status = static_cast<LrWpanMacStatus>(BytesToUint8(m_rxData, pos));
+        params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
 
         m_mlmeCommStatusIndicationCallback(params);
     }
@@ -795,7 +799,7 @@ UartLrWpanMac::AssociateConfirm()
     {
         uint8_t pos = 0;
         MlmeAssociateConfirmParams params;
-        params.m_status = static_cast<LrWpanMacStatus>(BytesToUint8(m_rxData, pos));
+        params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
         params.m_assocShortAddr = BytesToUint16(m_rxData, pos);
         m_mlmeAssociateConfirmCallback(params);
     }
@@ -808,7 +812,7 @@ UartLrWpanMac::DataConfirm()
     {
         uint8_t pos = 0;
         McpsDataConfirmParams params;
-        params.m_status = static_cast<LrWpanMacStatus>(BytesToUint8(m_rxData, pos));
+        params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
         params.m_msduHandle = BytesToUint8(m_rxData, pos);
         // TODO: Add timestamp when available
         m_mcpsDataConfirmCallback(params);
@@ -871,8 +875,8 @@ UartLrWpanMac::SetConfirm()
         uint8_t pos = 0;
         MlmeSetConfirmParams params;
 
-        params.id = static_cast<LrWpanMacPibAttributeIdentifier>(BytesToUint8(m_rxData, pos));
-        params.m_status = static_cast<LrWpanMacStatus>(BytesToUint8(m_rxData, pos));
+        params.id = static_cast<MacPibAttributeIdentifier>(BytesToUint8(m_rxData, pos));
+        params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
         m_mlmeSetConfirmCallback(params);
     }
 }
@@ -883,10 +887,10 @@ UartLrWpanMac::GetConfirm()
     if (!m_mlmeGetConfirmCallback.IsNull())
     {
         uint8_t pos = 0;
-        LrWpanMacStatus status = static_cast<LrWpanMacStatus>(BytesToUint8(m_rxData, pos));
-        LrWpanMacPibAttributeIdentifier id =
-            static_cast<LrWpanMacPibAttributeIdentifier>(BytesToUint8(m_rxData, pos));
-        Ptr<LrWpanMacPibAttributes> pibAttr = Create<LrWpanMacPibAttributes>();
+        MacStatus status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
+        MacPibAttributeIdentifier id =
+            static_cast<MacPibAttributeIdentifier>(BytesToUint8(m_rxData, pos));
+        Ptr<MacPibAttributes> pibAttr = Create<MacPibAttributes>();
 
         switch(id)
         {
@@ -931,4 +935,5 @@ UartLrWpanMac::RunIoService()
     m_ioService.run();
 }
 
+} // namespace uartnetdevice
 } // namespace ns3

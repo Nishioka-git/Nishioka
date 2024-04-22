@@ -33,6 +33,11 @@
 namespace ns3
 {
 
+class Packet;
+
+namespace uartnetdevice
+{
+
 enum ReadState
 {
     RX_START = 0,
@@ -56,9 +61,9 @@ enum PrimitiveType
     ORPHAN_IND = 10
 };
 
-class Packet;
 
-class UartLrWpanMac : public LrWpanMacBase
+
+class UartLrWpanMac : public lrwpan::LrWpanMacBase
 {
   public:
     /**
@@ -75,26 +80,26 @@ class UartLrWpanMac : public LrWpanMacBase
     UartLrWpanMac(const std::string& port);
     ~UartLrWpanMac() override;
 
-    void McpsDataRequest(McpsDataRequestParams params, Ptr<Packet> p) override;
+    void McpsDataRequest(lrwpan::McpsDataRequestParams params, Ptr<Packet> p) override;
 
-    void MlmeStartRequest(MlmeStartRequestParams params) override;
+    void MlmeStartRequest(lrwpan::MlmeStartRequestParams params) override;
 
-    void MlmeScanRequest(MlmeScanRequestParams params) override;
+    void MlmeScanRequest(lrwpan::MlmeScanRequestParams params) override;
 
-    void MlmeAssociateRequest(MlmeAssociateRequestParams params) override;
+    void MlmeAssociateRequest(lrwpan::MlmeAssociateRequestParams params) override;
 
-    void MlmeAssociateResponse(MlmeAssociateResponseParams params) override;
+    void MlmeAssociateResponse(lrwpan::MlmeAssociateResponseParams params) override;
 
-    void MlmeOrphanResponse(MlmeOrphanResponseParams params) override;
+    void MlmeOrphanResponse(lrwpan::MlmeOrphanResponseParams params) override;
 
-    void MlmeSyncRequest(MlmeSyncRequestParams params) override;
+    void MlmeSyncRequest(lrwpan::MlmeSyncRequestParams params) override;
 
-    void MlmePollRequest(MlmePollRequestParams params) override;
+    void MlmePollRequest(lrwpan::MlmePollRequestParams params) override;
 
-    void MlmeSetRequest(LrWpanMacPibAttributeIdentifier id,
-                        Ptr<LrWpanMacPibAttributes> attribute) override;
+    void MlmeSetRequest(lrwpan::MacPibAttributeIdentifier id,
+                        Ptr<lrwpan::MacPibAttributes> attribute) override;
 
-    void MlmeGetRequest(LrWpanMacPibAttributeIdentifier id) override;
+    void MlmeGetRequest(lrwpan::MacPibAttributeIdentifier id) override;
 
   protected:
     // Inherited from Object.
@@ -141,6 +146,8 @@ class UartLrWpanMac : public LrWpanMacBase
 
     uint32_t m_rxByteCount;
 };
+
+} // namespace uartnetdevice
 } // namespace ns3
 
 #endif /* UART_LRWPAN_MAC_H */
