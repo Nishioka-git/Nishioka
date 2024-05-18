@@ -369,20 +369,17 @@ UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id,
         Uint8ToBytes(dataBytes, attribute->macBeaconPayloadLength);
         break;
     case MacPibAttributeIdentifier::macBeaconPayload: {
-        /* TODO
-        uint32_t payloadSize = attribute->macBeaconPayload->GetSize();
-        uint8_t buffer[payloadSize];
-        // uint8_t *buffer = new uint8_t[payloadSize];
-        uint8_t* bufferPtr = buffer;
-        // Ptr<uint8_t> buffer[payloadSize];
-        attribute->macBeaconPayload->CopyData(bufferPtr, payloadSize);
+        uint8_t beaconPayloadSize = static_cast<uint8_t> (attribute->macBeaconPayload->GetSize());
+        Uint8ToBytes(dataBytes, beaconPayloadSize + 1); // Size: id(1) + beaconPayload (variable)
+        Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::macBeaconPayload);
 
-        for (uint32_t i = 0; i < payloadSize; i++)
+        uint8_t buffer[beaconPayloadSize];
+        uint8_t* bufferPtr = buffer;
+        attribute->macBeaconPayload->CopyData(bufferPtr, beaconPayloadSize);
+        for (uint32_t i = 0; i < beaconPayloadSize; i++)
         {
-            dataBytes.emplace_back(buffer[i]);
-            // Uint8ToBytes(dataBytes, attribute->macBeaconPayloadLength);
+            Uint8ToBytes(dataBytes, buffer[i]);
         }
-        */
         break;
     }
     default:
@@ -411,7 +408,7 @@ UartLrWpanMac::MlmeGetRequest(MacPibAttributeIdentifier id)
 
     Uint8ToBytes(dataBytes, 0xAA); // Begin of data 0xAA
     Uint8ToBytes(dataBytes, 2);    // primitive type
-    Uint8ToBytes(dataBytes, 1);
+    Uint8ToBytes(dataBytes, 1);    // parameter bytes
     Uint8ToBytes(dataBytes, static_cast<uint8_t>(id));
 
     try
@@ -572,7 +569,7 @@ UartLrWpanMac::ReadByte()
                                    }
                                    else
                                    { // No instruction received, print character (Use for debugging)
-                                       // std::cout << (*rxByte.get());
+                                        std::cout << (*rxByte.get());
                                       // uint8_t byte = (*rxByte.get());
                                       // std::cout << std::hex << "0x" << static_cast<uint32_t>(byte)
                                       //           << std::dec << "\n";
@@ -897,6 +894,19 @@ UartLrWpanMac::GetConfirm()
             case macExtendedAddress:
                pibAttr->macExtendedAddress = BytesToUint64(m_rxData, pos);
                break;
+            case macBeaconPayload:{
+               // The beaconPayload size is the m_rxData - (status and id = 2 bytes)
+               uint32_t beaconPayloadLength = m_rxData.size() - 2;
+               uint8_t buffer[beaconPayloadLength];
+
+               for (uint32_t i = 0; i < beaconPayloadLength; i++)
+               {
+                   buffer[i] = BytesToUint8(m_rxData, pos);
+               }
+               uint8_t* bufferPtr = buffer;
+               pibAttr->macBeaconPayload = Create<Packet>(bufferPtr, beaconPayloadLength);
+               break;
+            }
             case macBeaconPayloadLength:
                pibAttr->macBeaconPayloadLength = BytesToUint8(m_rxData, pos);
                break;
