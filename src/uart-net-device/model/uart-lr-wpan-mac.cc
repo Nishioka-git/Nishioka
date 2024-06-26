@@ -116,22 +116,20 @@ UartLrWpanMac::McpsDataRequest(McpsDataRequestParams params, Ptr<Packet> p)
     }
     Uint8ToBytes(dataBytes, params.m_txOptions);
 
-    uint32_t payloadSize = p->GetSize();
-    Uint8ToBytes(dataBytes, payloadSize);
+    Uint8ToBytes(dataBytes, p->GetSize());
+    auto bufferPtr = new uint8_t[p->GetSize()];
+    p->CopyData(bufferPtr, p->GetSize());
 
-    uint8_t buffer[payloadSize];
-    uint8_t* bufferPtr = buffer;
-    p->CopyData(bufferPtr, payloadSize);
-
-    for (uint32_t i = 0; i < payloadSize; i++)
+    for (uint32_t i = 0; i < p->GetSize(); i++)
     {
-        Uint8ToBytes(dataBytes, buffer[i]);
+        Uint8ToBytes(dataBytes, bufferPtr[i]);
     }
+    delete[] bufferPtr;
 
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (DataRequest)\n";
+        // std::cout << "write without issues (DataRequest)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -174,7 +172,7 @@ UartLrWpanMac::MlmeStartRequest(MlmeStartRequestParams params)
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (StartRequest)\n";
+        // std::cout << "write without issues (StartRequest)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -204,7 +202,7 @@ UartLrWpanMac::MlmeScanRequest(MlmeScanRequestParams params)
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (ScanRequest)\n";
+        // std::cout << "write without issues (ScanRequest)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -254,7 +252,7 @@ UartLrWpanMac::MlmeAssociateRequest(MlmeAssociateRequestParams params)
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (AssociationRequest)\n";
+        // std::cout << "write without issues (AssociationRequest)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -290,7 +288,7 @@ UartLrWpanMac::MlmeAssociateResponse(MlmeAssociateResponseParams params)
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (AssociationResponse)\n";
+        // std::cout << "write without issues (AssociationResponse)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -308,7 +306,7 @@ UartLrWpanMac::MlmeOrphanResponse(MlmeOrphanResponseParams params)
 
     Uint8ToBytes(dataBytes, 0xAA); // Begin of data 0xAA
     Uint8ToBytes(dataBytes, 12);   // primitive type
-     // Parameters size = 11 bytes
+                                   // Parameters size = 11 bytes
     // Orphan Address (8) + ShortAddress (2) + AssociatedMember (1)
     Uint8ToBytes(dataBytes, 11);
     Uint64ToBytes(dataBytes, params.m_orphanAddr.ConvertToInt());
@@ -318,7 +316,7 @@ UartLrWpanMac::MlmeOrphanResponse(MlmeOrphanResponseParams params)
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (AssociationResponse)\n";
+        // std::cout << "write without issues (AssociationResponse)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -341,8 +339,7 @@ UartLrWpanMac::MlmePollRequest(MlmePollRequestParams params)
 }
 
 void
-UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id,
-                              Ptr<MacPibAttributes> attribute)
+UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id, Ptr<MacPibAttributes> attribute)
 {
     NS_LOG_FUNCTION(this);
     std::vector<uint8_t> dataBytes;
@@ -369,28 +366,24 @@ UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id,
         Uint8ToBytes(dataBytes, attribute->macBeaconPayloadLength);
         break;
     case MacPibAttributeIdentifier::macBeaconPayload: {
-        uint8_t beaconPayloadSize = static_cast<uint8_t> (attribute->macBeaconPayload->GetSize());
-        Uint8ToBytes(dataBytes, beaconPayloadSize + 1); // Size: id(1) + beaconPayload (variable)
+        // Size: id(1) + beaconPayload (variable)
+        Uint8ToBytes(dataBytes, attribute->macBeaconPayload.size() + 1);
         Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::macBeaconPayload);
-
-        uint8_t buffer[beaconPayloadSize];
-        uint8_t* bufferPtr = buffer;
-        attribute->macBeaconPayload->CopyData(bufferPtr, beaconPayloadSize);
-        for (uint32_t i = 0; i < beaconPayloadSize; i++)
+        for (auto element : attribute->macBeaconPayload)
         {
-            Uint8ToBytes(dataBytes, buffer[i]);
+            dataBytes.emplace_back(element);
         }
         break;
     }
     default:
-
+        NS_ABORT_MSG("Attribute not supported");
         break;
     }
 
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (SetRequest)\n";
+        // std::cout << "write without issues (SetRequest)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -414,7 +407,7 @@ UartLrWpanMac::MlmeGetRequest(MacPibAttributeIdentifier id)
     try
     {
         boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
-        //std::cout << "write without issues (GetRequest)\n";
+        // std::cout << "write without issues (GetRequest)\n";
     }
     catch (const boost::system::system_error& e)
     {
@@ -569,10 +562,11 @@ UartLrWpanMac::ReadByte()
                                    }
                                    else
                                    { // No instruction received, print character (Use for debugging)
-                                        std::cout << (*rxByte.get());
-                                      // uint8_t byte = (*rxByte.get());
-                                      // std::cout << std::hex << "0x" << static_cast<uint32_t>(byte)
-                                      //           << std::dec << "\n";
+                                       std::cout << (*rxByte.get());
+                                       // uint8_t byte = (*rxByte.get());
+                                       // std::cout << std::hex << "0x" <<
+                                       // static_cast<uint32_t>(byte)
+                                       //           << std::dec << "\n";
                                    }
                                    break;
                                case RX_PRIMITIVE_TYPE:
@@ -651,8 +645,8 @@ UartLrWpanMac::ProcessData()
         GetConfirm();
         break;
     case ORPHAN_IND:
-       OrphanIndication();
-       break;
+        OrphanIndication();
+        break;
     default:
         std::cout << "Unknown Primitive with code " << static_cast<uint32_t>(m_rxPrimitiveType)
                   << " received \n";
@@ -850,14 +844,14 @@ UartLrWpanMac::DataIndication()
         // TODO Add timeStamp and msduLength when supported,
         // for now we just use msdu length here but we do not
         // push it up the stack
+
         uint32_t msduLength = BytesToUint8(m_rxData, pos);
-        uint8_t buffer[msduLength];
+        auto bufferPtr = new uint8_t[msduLength];
 
         for (uint32_t i = 0; i < msduLength; i++)
         {
-            buffer[i] = BytesToUint8(m_rxData, pos);
+            bufferPtr[i] = BytesToUint8(m_rxData, pos);
         }
-        uint8_t* bufferPtr = buffer;
         Ptr<Packet> packet = Create<Packet>(bufferPtr, msduLength);
 
         m_mcpsDataIndicationCallback(params, packet);
@@ -889,37 +883,30 @@ UartLrWpanMac::GetConfirm()
             static_cast<MacPibAttributeIdentifier>(BytesToUint8(m_rxData, pos));
         Ptr<MacPibAttributes> pibAttr = Create<MacPibAttributes>();
 
-        switch(id)
+        switch (id)
         {
-            case macExtendedAddress:
-               pibAttr->macExtendedAddress = BytesToUint64(m_rxData, pos);
-               break;
-            case macBeaconPayload:{
-               // The beaconPayload size is the m_rxData - (status and id = 2 bytes)
-               uint32_t beaconPayloadLength = m_rxData.size() - 2;
-               uint8_t buffer[beaconPayloadLength];
-
-               for (uint32_t i = 0; i < beaconPayloadLength; i++)
-               {
-                   buffer[i] = BytesToUint8(m_rxData, pos);
-               }
-               uint8_t* bufferPtr = buffer;
-               pibAttr->macBeaconPayload = Create<Packet>(bufferPtr, beaconPayloadLength);
-               break;
+        case macExtendedAddress:
+            pibAttr->macExtendedAddress = BytesToUint64(m_rxData, pos);
+            break;
+        case macBeaconPayload: {
+            for (uint32_t i = pos; i < m_rxData.size(); i++)
+            {
+                pibAttr->macBeaconPayload.emplace_back(m_rxData[i]);
             }
-            case macBeaconPayloadLength:
-               pibAttr->macBeaconPayloadLength = BytesToUint8(m_rxData, pos);
-               break;
-            case macPanId:
-               pibAttr->macPanId = BytesToUint16(m_rxData, pos);
-               break;
-            case macShortAddress:
-               pibAttr->macShortAddress = BytesToUint16(m_rxData, pos);
-               break;
-            default:
-              NS_LOG_WARN("Attribute not supported in MLME-GET.request");
-              break;
-
+            break;
+        }
+        case macBeaconPayloadLength:
+            pibAttr->macBeaconPayloadLength = BytesToUint8(m_rxData, pos);
+            break;
+        case macPanId:
+            pibAttr->macPanId = BytesToUint16(m_rxData, pos);
+            break;
+        case macShortAddress:
+            pibAttr->macShortAddress = BytesToUint16(m_rxData, pos);
+            break;
+        default:
+            NS_LOG_WARN("Attribute not supported in MLME-GET.request");
+            break;
         }
 
         m_mlmeGetConfirmCallback(status, id, pibAttr);

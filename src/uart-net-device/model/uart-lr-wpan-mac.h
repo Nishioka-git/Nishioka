@@ -61,8 +61,6 @@ enum PrimitiveType
     ORPHAN_IND = 10
 };
 
-
-
 class UartLrWpanMac : public lrwpan::LrWpanMacBase
 {
   public:

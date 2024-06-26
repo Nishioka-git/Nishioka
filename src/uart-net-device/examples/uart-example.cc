@@ -32,12 +32,10 @@ using namespace ns3;
 using namespace ns3::lrwpan;
 using namespace ns3::uartnetdevice;
 
-
 static void
 ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
 {
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Scan confirm status: " << static_cast<uint32_t>(params.m_status)
               << " | Type: " << static_cast<uint32_t>(params.m_scanType) << "\n";
     if (params.m_scanType == MLMESCAN_ED)
@@ -50,7 +48,8 @@ ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
     }
     else
     {
-        std::cout << " Networks Found (" << static_cast<uint32_t>(params.m_resultListSize) << "):\n";
+        std::cout << " Networks Found (" << static_cast<uint32_t>(params.m_resultListSize)
+                  << "):\n";
 
         for (auto descriptor : params.m_panDescList)
         {
@@ -95,9 +94,9 @@ ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
 static void
 AssociateIndication(Ptr<UartNetDevice> device, MlmeAssociateIndicationParams params)
 {
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
-              << ", AssociateIndication: Coordinator Received Association request from device with\n";
+    std::cout
+        << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+        << ", AssociateIndication: Coordinator Received Association request from device with\n";
     std::cout << "capability " << std::hex << static_cast<uint32_t>(params.capabilityInfo)
               << std::dec << " | Dev Addr: " << params.m_extDevAddr << "\n";
     std::cout << "Sending Association Response...\n";
@@ -126,34 +125,29 @@ AssociateIndication(Ptr<UartNetDevice> device, MlmeAssociateIndicationParams par
 static void
 CommStatusIndication(Ptr<UartNetDevice> device, MlmeCommStatusIndicationParams params)
 {
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Coordinator received COMM-STATUS.indication\n";
 }
 
 static void
 AssociateConfirm(Ptr<UartNetDevice> device, MlmeAssociateConfirmParams params)
 {
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
-              << ", Associate Confirm: Status "
-              << static_cast<uint32_t>(params.m_status) << "| Address: " << params.m_assocShortAddr
-              << "\n";
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+              << ", Associate Confirm: Status " << static_cast<uint32_t>(params.m_status)
+              << "| Address: " << params.m_assocShortAddr << "\n";
 }
 
 static void
 StartConfirm(Ptr<UartNetDevice> device, MlmeStartConfirmParams params)
 {
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Start confirm | Status :" << static_cast<uint32_t>(params.m_status) << "\n";
 }
 
 static void
 DataConfirm(Ptr<UartNetDevice> device, McpsDataConfirmParams params)
 {
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Data confirm | Status :" << static_cast<uint32_t>(params.m_status)
               << " | Msdu handle " << static_cast<uint32_t>(params.m_msduHandle) << "\n";
 }
@@ -161,13 +155,11 @@ DataConfirm(Ptr<UartNetDevice> device, McpsDataConfirmParams params)
 static void
 DataIndication(Ptr<UartNetDevice> device, McpsDataIndicationParams params, Ptr<Packet> p)
 {
-    uint8_t buffer[p->GetSize()];
-    uint8_t* bufferPtr = buffer;
+    auto bufferPtr = new uint8_t[p->GetSize()];
     p->CopyData(bufferPtr, p->GetSize());
-    std::string data = std::string((char*)buffer);
+    std::string data = std::string((char*)bufferPtr);
 
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Data Indication | Packet received with :\n"
               << "    SrcMode: " << static_cast<uint32_t>(params.m_srcAddrMode) << "\n"
               << "    SrcAddr: " << params.m_srcAddr << "\n"
@@ -184,11 +176,10 @@ DataIndication(Ptr<UartNetDevice> device, McpsDataIndicationParams params, Ptr<P
 static void
 SetConfirm(Ptr<UartNetDevice> device, MlmeSetConfirmParams params)
 {
-    std::cout << Simulator::Now().As(Time::S)
-              << " Node " << device->GetNode()->GetId()
-              << ", In Set Confirm with id attribute 0x" << std::hex
-              << params.id << std::dec << " and status 0x" << std::hex
-              << static_cast<uint32_t>(params.m_status) << std::dec << "\n";
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+              << ", In Set Confirm with id attribute 0x" << std::hex << params.id << std::dec
+              << " and status 0x" << std::hex << static_cast<uint32_t>(params.m_status) << std::dec
+              << "\n";
 }
 
 static void
@@ -197,57 +188,45 @@ GetConfirm(Ptr<UartNetDevice> device,
            MacPibAttributeIdentifier id,
            Ptr<MacPibAttributes> pibattr)
 {
-    switch(id)
+    switch (id)
     {
-        case MacPibAttributeIdentifier::macPanId:
-           std::cout << Simulator::Now().As(Time::S)
-                     << " Node " << device->GetNode()->GetId()
-                     << ", In GET Confirm with id attribute" << id
-                     << " and status 0x" << std::hex << static_cast<uint32_t>(status) << std::dec
-                     << " macPanId 0x" << std::hex << pibattr->macPanId << std::dec << "\n";
-           break;
-        case MacPibAttributeIdentifier::macShortAddress:
-           std::cout << Simulator::Now().As(Time::S)
-                     << " Node " << device->GetNode()->GetId()
-                     << ", In GET Confirm with id attribute " << id
-                     << " and status 0x" << std::hex << static_cast<uint32_t>(status) << std::dec
-                     << " macShortAddress [" << pibattr->macShortAddress << "]\n";
-           break;
-        case MacPibAttributeIdentifier::macExtendedAddress:
-           std::cout << Simulator::Now().As(Time::S)
-                     << " Node " << device->GetNode()->GetId()
-                     << ", In GET Confirm with id attribute " << id
-                     << " and status 0x" << std::hex << static_cast<uint32_t>(status) << std::dec
-                     << " macExtendedAddress [" << pibattr->macExtendedAddress << "]\n";
-           break;
-        case MacPibAttributeIdentifier::macBeaconPayloadLength:
-           std::cout << Simulator::Now().As(Time::S)
-                     << " Node " << device->GetNode()->GetId()
-                     << ", In GET Confirm with id attribute " << id
-                     << " and status 0x" << std::hex << static_cast<uint32_t>(status) << std::dec
-                     << " macBeaconPayloadLength "
-                     << static_cast<uint32_t> (pibattr->macBeaconPayloadLength) << "\n";
-           break;
-        case MacPibAttributeIdentifier::macBeaconPayload:{
-           uint8_t buffer[pibattr->macBeaconPayload->GetSize()];
-           uint8_t* bufferPtr = buffer;
-           pibattr->macBeaconPayload->CopyData(bufferPtr, pibattr->macBeaconPayload->GetSize());
-           std::string data = std::string((char*)buffer);
-
-           std::cout << Simulator::Now().As(Time::S)
-                     << " Node " << device->GetNode()->GetId()
-                     << ", In GET Confirm with id attribute " << id
-                     << " and status 0x" << std::hex << static_cast<uint32_t>(status) << std::dec
-                     << " macBeaconPayload: " << data << "\n";
-           break;
-        }
-        default:
-           std::cout << Simulator::Now().As(Time::S)
-                     << " Node " << device->GetNode()->GetId()
-                     << " Attribute not listed.\n";
-           break;
+    case MacPibAttributeIdentifier::macPanId:
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << ", In GET Confirm with id attribute" << id << " and status 0x" << std::hex
+                  << static_cast<uint32_t>(status) << std::dec << " macPanId 0x" << std::hex
+                  << pibattr->macPanId << std::dec << "\n";
+        break;
+    case MacPibAttributeIdentifier::macShortAddress:
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << ", In GET Confirm with id attribute " << id << " and status 0x" << std::hex
+                  << static_cast<uint32_t>(status) << std::dec << " macShortAddress ["
+                  << pibattr->macShortAddress << "]\n";
+        break;
+    case MacPibAttributeIdentifier::macExtendedAddress:
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << ", In GET Confirm with id attribute " << id << " and status 0x" << std::hex
+                  << static_cast<uint32_t>(status) << std::dec << " macExtendedAddress ["
+                  << pibattr->macExtendedAddress << "]\n";
+        break;
+    case MacPibAttributeIdentifier::macBeaconPayloadLength:
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << ", In GET Confirm with id attribute " << id << " and status 0x" << std::hex
+                  << static_cast<uint32_t>(status) << std::dec << " macBeaconPayloadLength "
+                  << static_cast<uint32_t>(pibattr->macBeaconPayloadLength) << "\n";
+        break;
+    case MacPibAttributeIdentifier::macBeaconPayload: {
+        std::string data(pibattr->macBeaconPayload.begin(), pibattr->macBeaconPayload.end());
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << ", In GET Confirm with id attribute " << id << " and status 0x" << std::hex
+                  << static_cast<uint32_t>(status) << std::dec << " macBeaconPayload: " << data
+                  << "\n";
+        break;
     }
-
+    default:
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << " Attribute not listed.\n";
+        break;
+    }
 }
 
 int
@@ -302,8 +281,6 @@ main(int argc, char* argv[])
                                    MacPibAttributeIdentifier::macShortAddress,
                                    pibAttr);
 
-
-
     // Test MLME-START.request
     MlmeStartRequestParams startParams;
     startParams.m_PanId = 0xCAFE;
@@ -321,17 +298,12 @@ main(int argc, char* argv[])
                                    uartNetDevice->GetMac(),
                                    startParams);
 
-
-
-
-        // Test MLME-SET.request (beacon Payload Length and beacon Payload)
-    std::ostringstream msgBeacon;
-    msgBeacon << "My beacon Payload" << '\0';
-    Ptr<Packet> beaconPayload = Create<Packet>((uint8_t*)msgBeacon.str().c_str(),
-                                                         msgBeacon.str().length());
+    // Test MLME-SET.request (beacon Payload Length and beacon Payload)
+    std::string stringMsg = "My beacon Payload\0";
+    std::vector<uint8_t> beaconMsg(stringMsg.begin(), stringMsg.end());
 
     Ptr<MacPibAttributes> pibAttr2 = Create<MacPibAttributes>();
-    pibAttr2->macBeaconPayloadLength = beaconPayload->GetSize();
+    pibAttr2->macBeaconPayloadLength = beaconMsg.size();
     Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
                                    Seconds(3.4),
                                    &UartLrWpanMac::MlmeSetRequest,
@@ -346,7 +318,7 @@ main(int argc, char* argv[])
                                    MacPibAttributeIdentifier::macBeaconPayloadLength);
 
     Ptr<MacPibAttributes> pibAttr3 = Create<MacPibAttributes>();
-    pibAttr3->macBeaconPayload = beaconPayload;
+    pibAttr3->macBeaconPayload = beaconMsg; // beaconPayload;
     Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
                                    Seconds(3.8),
                                    &UartLrWpanMac::MlmeSetRequest,
@@ -360,9 +332,6 @@ main(int argc, char* argv[])
                                    uartNetDevice->GetMac(),
                                    MacPibAttributeIdentifier::macBeaconPayload);
 
-
-
-
     // Test MLME-GET.request
     Simulator::ScheduleWithContext(uartNetDevice2->GetNode()->GetId(),
                                    Seconds(5.5),
@@ -375,8 +344,6 @@ main(int argc, char* argv[])
                                    &UartLrWpanMac::MlmeGetRequest,
                                    uartNetDevice2->GetMac(),
                                    MacPibAttributeIdentifier::macPanId);
-
-
 
     /*
     // Test MLME-SCAN.request (ENERGY DETECTION)
