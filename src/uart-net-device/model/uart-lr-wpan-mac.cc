@@ -350,6 +350,16 @@ UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id, Ptr<MacPibAttributes
     // attribute id(1) + parameter size (variable)
     switch (id)
     {
+    case MacPibAttributeIdentifier::pCurrentChannel:
+        Uint8ToBytes(dataBytes,2); // Size: id(1) + phyCurrentChannel (1)
+        Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::pCurrentChannel);
+        Uint8ToBytes(dataBytes, attribute->pCurrentChannel);
+        break;
+    case MacPibAttributeIdentifier::pCurrentPage:
+        Uint8ToBytes(dataBytes,2); // Size: id(1) + phyCurrentPage (1)
+        Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::pCurrentPage);
+        Uint8ToBytes(dataBytes, attribute->pCurrentPage);
+        break;
     case MacPibAttributeIdentifier::macPanId:
         Uint8ToBytes(dataBytes, 3); // Size: id(1) + macPanId (2)
         Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::macPanId);
