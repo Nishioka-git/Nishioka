@@ -306,8 +306,7 @@ UartLrWpanMac::MlmeOrphanResponse(MlmeOrphanResponseParams params)
 
     Uint8ToBytes(dataBytes, 0xAA); // Begin of data 0xAA
     Uint8ToBytes(dataBytes, 12);   // primitive type
-                                   // Parameters size = 11 bytes
-    // Orphan Address (8) + ShortAddress (2) + AssociatedMember (1)
+    // Size :Orphan Address (8) + ShortAddress (2) + AssociatedMember (1) = 11 bytes
     Uint8ToBytes(dataBytes, 11);
     Uint64ToBytes(dataBytes, params.m_orphanAddr.ConvertToInt());
     Uint16ToBytes(dataBytes, params.m_shortAddr.ConvertToInt());
@@ -330,12 +329,16 @@ void
 UartLrWpanMac::MlmeSyncRequest(MlmeSyncRequestParams params)
 {
     NS_LOG_FUNCTION(this);
+    // TODO
+    NS_ABORT_MSG("Primitive not supported");
 }
 
 void
 UartLrWpanMac::MlmePollRequest(MlmePollRequestParams params)
 {
     NS_LOG_FUNCTION(this);
+    // TODO
+    NS_ABORT_MSG("Primitive not supported");
 }
 
 void
@@ -351,12 +354,12 @@ UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id, Ptr<MacPibAttributes
     switch (id)
     {
     case MacPibAttributeIdentifier::pCurrentChannel:
-        Uint8ToBytes(dataBytes,2); // Size: id(1) + phyCurrentChannel (1)
+        Uint8ToBytes(dataBytes, 2); // Size: id(1) + phyCurrentChannel (1)
         Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::pCurrentChannel);
         Uint8ToBytes(dataBytes, attribute->pCurrentChannel);
         break;
     case MacPibAttributeIdentifier::pCurrentPage:
-        Uint8ToBytes(dataBytes,2); // Size: id(1) + phyCurrentPage (1)
+        Uint8ToBytes(dataBytes, 2); // Size: id(1) + phyCurrentPage (1)
         Uint8ToBytes(dataBytes, MacPibAttributeIdentifier::pCurrentPage);
         Uint8ToBytes(dataBytes, attribute->pCurrentPage);
         break;
@@ -895,6 +898,12 @@ UartLrWpanMac::GetConfirm()
 
         switch (id)
         {
+        case pCurrentChannel:
+            pibAttr->pCurrentChannel = BytesToUint8(m_rxData, pos);
+            break;
+        case pCurrentPage:
+            pibAttr->pCurrentPage = BytesToUint8(m_rxData, pos);
+            break;
         case macExtendedAddress:
             pibAttr->macExtendedAddress = BytesToUint64(m_rxData, pos);
             break;
@@ -915,7 +924,7 @@ UartLrWpanMac::GetConfirm()
             pibAttr->macShortAddress = BytesToUint16(m_rxData, pos);
             break;
         default:
-            NS_LOG_WARN("Attribute not supported in MLME-GET.request");
+            NS_ABORT_MSG("Attribute not supported in MLME-GET.request");
             break;
         }
 

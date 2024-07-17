@@ -77,18 +77,18 @@ ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
             std::cout << "      Pan Coord: " << superframe.IsPanCoor() << "\n";
             std::cout << "      Battery Life Ext: " << superframe.IsBattLifeExt() << "\n";
         }
+
+        // Use the scan results to initiate association with the first coordinator found.
+        MlmeAssociateRequestParams associateParams;
+        associateParams.m_chNum = params.m_panDescList[0].m_logCh;
+        associateParams.m_chPage = params.m_panDescList[0].m_logChPage;
+        associateParams.m_coordAddrMode = params.m_panDescList[0].m_coorAddrMode;
+        associateParams.m_coordPanId = params.m_panDescList[0].m_coorPanId;
+        associateParams.m_capabilityInfo = 0x80; // Assign short address
+        associateParams.m_coordShortAddr = params.m_panDescList[0].m_coorShortAddr;
+
+        device->GetMac()->MlmeAssociateRequest(associateParams);
     }
-
-    // Use the scan results to initiate association with the first coordinator found.
-    MlmeAssociateRequestParams associateParams;
-    associateParams.m_chNum = params.m_panDescList[0].m_logCh;
-    associateParams.m_chPage = params.m_panDescList[0].m_logChPage;
-    associateParams.m_coordAddrMode = params.m_panDescList[0].m_coorAddrMode;
-    associateParams.m_coordPanId = params.m_panDescList[0].m_coorPanId;
-    associateParams.m_capabilityInfo = 0x80; // Assign short address
-    associateParams.m_coordShortAddr = params.m_panDescList[0].m_coorShortAddr;
-
-    device->GetMac()->MlmeAssociateRequest(associateParams);
 }
 
 static void
@@ -177,7 +177,7 @@ static void
 SetConfirm(Ptr<UartNetDevice> device, MlmeSetConfirmParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
-              << ", In Set Confirm with id attribute 0x" << std::hex << params.id << std::dec
+              << ", In SET Confirm with id attribute 0x" << std::hex << params.id << std::dec
               << " and status 0x" << std::hex << static_cast<uint32_t>(params.m_status) << std::dec
               << "\n";
 }
@@ -190,6 +190,21 @@ GetConfirm(Ptr<UartNetDevice> device,
 {
     switch (id)
     {
+    case MacPibAttributeIdentifier::pCurrentChannel: {
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << ", In GET Confirm with id attribute " << id << " and status 0x" << std::hex
+                  << static_cast<uint32_t>(status) << std::dec
+                  << " phyCurrentChannel: " << static_cast<uint32_t>(pibattr->pCurrentChannel)
+                  << "\n";
+        break;
+    }
+    case MacPibAttributeIdentifier::pCurrentPage: {
+        std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+                  << ", In GET Confirm with id attribute " << id << " and status 0x" << std::hex
+                  << static_cast<uint32_t>(status) << std::dec
+                  << " phyPage: " << static_cast<uint32_t>(pibattr->pCurrentPage) << "\n";
+        break;
+    }
     case MacPibAttributeIdentifier::macPanId:
         std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
                   << ", In GET Confirm with id attribute" << id << " and status 0x" << std::hex
@@ -271,15 +286,61 @@ main(int argc, char* argv[])
     uartNetDevice2->GetMac()->SetMlmeGetConfirmCallback(
         MakeBoundCallback(&GetConfirm, uartNetDevice2));
 
+    // Test MLME-SET.request (page), this is basically a place holder
+    // JN5169 , do not have other page other than 0
+    /*Ptr<MacPibAttributes> pibAttr0 = Create<MacPibAttributes>();
+    pibAttr0->pCurrentPage = 2;
+    Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
+                                   Seconds(1.0),
+                                   &UartLrWpanMac::MlmeSetRequest,
+                                   uartNetDevice->GetMac(),
+                                   MacPibAttributeIdentifier::pCurrentPage,
+                                   pibAttr0);
+
+    Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
+                                   Seconds(1.5),
+                                   &UartLrWpanMac::MlmeGetRequest,
+                                   uartNetDevice->GetMac(),
+                                   MacPibAttributeIdentifier::pCurrentPage);*/
+
+    /*
+    // Test MLME-SCAN.request (ENERGY DETECTION)
+    MlmeScanRequestParams scanParams;
+    scanParams.m_scanChannels = 0x00a2c800; // 0x00007800; // Channels 11-14
+    scanParams.m_scanDuration = 1;
+    scanParams.m_scanType = MLMESCAN_ED;
+    Simulator::ScheduleWithContext(uartNetDevice2->GetNode()->GetId(),
+                                   Seconds(1.0),
+                                   &UartLrWpanMac::MlmeScanRequest,
+                                   uartNetDevice2->GetMac(),
+                                   scanParams);
+    */
+
+    // Test MLME-SET.request (channel)
+    Ptr<MacPibAttributes> pibAttr0 = Create<MacPibAttributes>();
+    pibAttr0->pCurrentChannel = 0xD;
+    Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
+                                   Seconds(1.0),
+                                   &UartLrWpanMac::MlmeSetRequest,
+                                   uartNetDevice->GetMac(),
+                                   MacPibAttributeIdentifier::pCurrentChannel,
+                                   pibAttr0);
+
+    Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
+                                   Seconds(1.5),
+                                   &UartLrWpanMac::MlmeGetRequest,
+                                   uartNetDevice->GetMac(),
+                                   MacPibAttributeIdentifier::pCurrentChannel);
+
     // Test MLME-SET.request (short address)
-    Ptr<MacPibAttributes> pibAttr = Create<MacPibAttributes>();
-    pibAttr->macShortAddress = Mac16Address("00:00");
+    Ptr<MacPibAttributes> pibAttr1 = Create<MacPibAttributes>();
+    pibAttr1->macShortAddress = Mac16Address("00:00");
     Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
                                    Seconds(2.0),
                                    &UartLrWpanMac::MlmeSetRequest,
                                    uartNetDevice->GetMac(),
                                    MacPibAttributeIdentifier::macShortAddress,
-                                   pibAttr);
+                                   pibAttr1);
 
     // Test MLME-START.request
     MlmeStartRequestParams startParams;
@@ -299,6 +360,7 @@ main(int argc, char* argv[])
                                    startParams);
 
     // Test MLME-SET.request (beacon Payload Length and beacon Payload)
+    //      MLME-GET.request
     std::string stringMsg = "My beacon Payload\0";
     std::vector<uint8_t> beaconMsg(stringMsg.begin(), stringMsg.end());
 
@@ -332,7 +394,7 @@ main(int argc, char* argv[])
                                    uartNetDevice->GetMac(),
                                    MacPibAttributeIdentifier::macBeaconPayload);
 
-    // Test MLME-GET.request
+    // Test MLME-GET.request (macExtendedAddress)
     Simulator::ScheduleWithContext(uartNetDevice2->GetNode()->GetId(),
                                    Seconds(5.5),
                                    &UartLrWpanMac::MlmeGetRequest,
@@ -344,15 +406,6 @@ main(int argc, char* argv[])
                                    &UartLrWpanMac::MlmeGetRequest,
                                    uartNetDevice2->GetMac(),
                                    MacPibAttributeIdentifier::macPanId);
-
-    /*
-    // Test MLME-SCAN.request (ENERGY DETECTION)
-    MlmeScanRequestParams scanParams;
-    scanParams.m_scanChannels = 0x00a2c800; // 0x00007800; // Channels 11-14
-    scanParams.m_scanDuration = 1;
-    scanParams.m_scanType = MLMESCAN_ED;
-    uartNetDevice2->GetMac()->MlmeScanRequest(scanParams);
-    */
 
     // Test MLME-SCAN.request (ACTIVE SCAN)
     MlmeScanRequestParams scanParams;
