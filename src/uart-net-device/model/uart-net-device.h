@@ -28,7 +28,7 @@ class UartNetDevice : public NetDevice
     /**
      * Get the type ID.
      *
-     * \return the object TypeId
+     * @return the object TypeId
      */
     static TypeId GetTypeId();
 
@@ -39,14 +39,14 @@ class UartNetDevice : public NetDevice
     /**
      * Set the MAC to be used by this NetDevice.
      *
-     * \param mac the MAC to be used
+     * @param mac the MAC to be used
      */
     void SetMac(Ptr<UartLrWpanMac> mac);
 
     /**
      * Get the MAC used by this NetDevice.
      *
-     * \return the MAC object
+     * @return the MAC object
      */
     Ptr<UartLrWpanMac> GetMac() const;
 
@@ -57,13 +57,13 @@ class UartNetDevice : public NetDevice
 
     /**
      * This method indirects to LrWpanMac::SetShortAddress ()
-     * \param address The short address.
+     * @param address The short address.
      */
     void SetAddress(Address address) override;
 
     /**
      * This method indirects to LrWpanMac::SetShortAddress ()
-     * \returns The short address.
+     * @return The short address.
      */
     Address GetAddress() const override;
 
