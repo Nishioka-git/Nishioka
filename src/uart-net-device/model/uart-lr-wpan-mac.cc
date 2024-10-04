@@ -11,12 +11,31 @@
 
 #include <ns3/log.h>
 
+#include <boost/asio.hpp>
+#include <map>
+
 using namespace ns3::lrwpan;
 
 namespace ns3
 {
 namespace uartnetdevice
 {
+
+/**
+ *  The IO service used to provide asynchronous serial communication. This service is used by
+ *  the serial port instances.
+ *  This is declared as a static variable to avoid "cppyyy undefined symbols" errors in
+ *  the python bindings when using external libraries such as boost.
+ */
+static boost::asio::io_service g_ioService;
+
+/**
+ *  Map containing the serial port instances necessary to realize serial communication
+ *  with hardware devices.
+ *  This is declared as a static variable to avoid "cppyyy undefined symbols" errors in
+ *  the python bindings when using external libraries such as boost.
+ */
+static std::map<uint32_t, boost::asio::serial_port> g_serialPortInstances;
 
 NS_LOG_COMPONENT_DEFINE("UartLrWpanMac");
 NS_OBJECT_ENSURE_REGISTERED(UartLrWpanMac);
@@ -32,16 +51,20 @@ UartLrWpanMac::GetTypeId()
 }
 
 UartLrWpanMac::UartLrWpanMac()
-    : m_ioService(),
-      m_serial(m_ioService)
 {
+    // Use the size of the map to assign instances IDs
+    m_currentInstanceId = g_serialPortInstances.size();
+    g_serialPortInstances.insert(
+        {g_serialPortInstances.size(), boost::asio::serial_port(g_ioService)});
 }
 
 UartLrWpanMac::UartLrWpanMac(const std::string& port)
-    : m_ioService(),
-      m_serial(m_ioService),
-      m_port(port)
+    : m_port(port)
 {
+    m_currentInstanceId = g_serialPortInstances.size();
+    g_serialPortInstances.insert(
+        {g_serialPortInstances.size(), boost::asio::serial_port(g_ioService)});
+
     m_rxState = RX_START;
     m_rxPrimitiveType = NONE_CFM;
     m_paramsMaxSize = 0;
@@ -54,8 +77,12 @@ UartLrWpanMac::UartLrWpanMac(const std::string& port)
 
 UartLrWpanMac::~UartLrWpanMac()
 {
-    m_serial.close();
-    m_ioService.stop();
+    g_serialPortInstances.at(m_currentInstanceId).close();
+    if (!g_ioService.stopped())
+    {
+        g_ioService.stop();
+    }
+
     m_ioServiceThread.join();
 }
 
@@ -117,7 +144,8 @@ UartLrWpanMac::McpsDataRequest(McpsDataRequestParams params, Ptr<Packet> p)
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
         // std::cout << "write without issues (DataRequest)\n";
     }
     catch (const boost::system::system_error& e)
@@ -160,7 +188,8 @@ UartLrWpanMac::MlmeStartRequest(MlmeStartRequestParams params)
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
         // std::cout << "write without issues (StartRequest)\n";
     }
     catch (const boost::system::system_error& e)
@@ -190,7 +219,9 @@ UartLrWpanMac::MlmeScanRequest(MlmeScanRequestParams params)
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
+
         // std::cout << "write without issues (ScanRequest)\n";
     }
     catch (const boost::system::system_error& e)
@@ -240,7 +271,8 @@ UartLrWpanMac::MlmeAssociateRequest(MlmeAssociateRequestParams params)
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
         // std::cout << "write without issues (AssociationRequest)\n";
     }
     catch (const boost::system::system_error& e)
@@ -276,7 +308,8 @@ UartLrWpanMac::MlmeAssociateResponse(MlmeAssociateResponseParams params)
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
         // std::cout << "write without issues (AssociationResponse)\n";
     }
     catch (const boost::system::system_error& e)
@@ -303,7 +336,8 @@ UartLrWpanMac::MlmeOrphanResponse(MlmeOrphanResponseParams params)
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
         // std::cout << "write without issues (AssociationResponse)\n";
     }
     catch (const boost::system::system_error& e)
@@ -384,7 +418,8 @@ UartLrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id, Ptr<MacPibAttributes
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
         // std::cout << "write without issues (SetRequest)\n";
     }
     catch (const boost::system::system_error& e)
@@ -408,7 +443,8 @@ UartLrWpanMac::MlmeGetRequest(MacPibAttributeIdentifier id)
 
     try
     {
-        boost::asio::write(m_serial, boost::asio::buffer(dataBytes));
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
         // std::cout << "write without issues (GetRequest)\n";
     }
     catch (const boost::system::system_error& e)
@@ -517,13 +553,17 @@ UartLrWpanMac::OpenPort()
 {
     try
     {
-        m_serial.open(m_port);
-        m_serial.set_option(boost::asio::serial_port_base::baud_rate(115200));
-        m_serial.set_option(boost::asio::serial_port_base::character_size(8));
-        m_serial.set_option(boost::asio::serial_port_base::stop_bits(
-            boost::asio::serial_port_base::stop_bits::one));
-        m_serial.set_option(
-            boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
+        g_serialPortInstances.at(m_currentInstanceId).open(m_port);
+        g_serialPortInstances.at(m_currentInstanceId)
+            .set_option(boost::asio::serial_port_base::baud_rate(115200));
+        g_serialPortInstances.at(m_currentInstanceId)
+            .set_option(boost::asio::serial_port_base::character_size(8));
+        g_serialPortInstances.at(m_currentInstanceId)
+            .set_option(boost::asio::serial_port_base::stop_bits(
+                boost::asio::serial_port_base::stop_bits::one));
+        g_serialPortInstances.at(m_currentInstanceId)
+            .set_option(
+                boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
 
         std::cout << "Connected to port: " << m_port << "\n";
     }
@@ -542,7 +582,7 @@ UartLrWpanMac::ReadByte()
     {
         auto rxByte = std::make_shared<uint8_t>();
 
-        async_read(m_serial,
+        async_read(g_serialPortInstances.at(m_currentInstanceId),
                    boost::asio::buffer(rxByte.get(), 1),
                    [this, rxByte](const boost::system::error_code& errorCode,
                                   std::size_t bytes_transferred) {
@@ -550,7 +590,7 @@ UartLrWpanMac::ReadByte()
                        {
                            {
                                // Process the received byte (read_byte).
-                               std::lock_guard<std::mutex> lock(mutex_);
+                               std::lock_guard<std::mutex> lock(m_mutex);
 
                                // A complete received primitive instruction requires these bytes:
                                // Initial byte 0xAA (1byte)| primitive type (1 byte) |
@@ -558,13 +598,13 @@ UartLrWpanMac::ReadByte()
                                switch (m_rxState)
                                {
                                case RX_START:
-                                   if ((*rxByte.get()) == 0xAA)
+                                   if ((*rxByte) == 0xAA)
                                    {
                                        m_rxState = RX_PRIMITIVE_TYPE;
                                    }
                                    else
                                    { // No instruction received, print character (Use for debugging)
-                                       std::cout << (*rxByte.get());
+                                       std::cout << (*rxByte);
                                        // uint8_t byte = (*rxByte.get());
                                        // std::cout << std::hex << "0x" <<
                                        // static_cast<uint32_t>(byte)
@@ -572,15 +612,15 @@ UartLrWpanMac::ReadByte()
                                    }
                                    break;
                                case RX_PRIMITIVE_TYPE:
-                                   m_rxPrimitiveType = static_cast<PrimitiveType>(*rxByte.get());
+                                   m_rxPrimitiveType = static_cast<PrimitiveType>(*rxByte);
                                    m_rxState = RX_PARAMS_SIZE;
                                    break;
                                case RX_PARAMS_SIZE:
-                                   m_paramsMaxSize = (*rxByte.get());
+                                   m_paramsMaxSize = (*rxByte);
                                    m_rxState = RX_WAIT_DATA;
                                    break;
                                case RX_WAIT_DATA:
-                                   m_rxData.emplace_back(*rxByte.get());
+                                   m_rxData.emplace_back(*rxByte);
                                    m_rxByteCount++;
                                    if (m_rxByteCount == m_paramsMaxSize)
                                    {
@@ -880,9 +920,8 @@ UartLrWpanMac::GetConfirm()
     if (!m_mlmeGetConfirmCallback.IsNull())
     {
         uint8_t pos = 0;
-        MacStatus status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
-        MacPibAttributeIdentifier id =
-            static_cast<MacPibAttributeIdentifier>(BytesToUint8(m_rxData, pos));
+        auto status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
+        auto id = static_cast<MacPibAttributeIdentifier>(BytesToUint8(m_rxData, pos));
         Ptr<MacPibAttributes> pibAttr = Create<MacPibAttributes>();
 
         switch (id)
@@ -937,7 +976,7 @@ UartLrWpanMac::OrphanIndication()
 void
 UartLrWpanMac::RunIoService()
 {
-    m_ioService.run();
+    g_ioService.run();
 }
 
 } // namespace uartnetdevice

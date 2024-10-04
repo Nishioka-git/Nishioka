@@ -40,7 +40,7 @@ ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
         std::cout << " Networks Found (" << static_cast<uint32_t>(params.m_resultListSize)
                   << "):\n";
 
-        for (auto descriptor : params.m_panDescList)
+        for (const auto& descriptor : params.m_panDescList)
         {
             std::cout << "   Coord. Address Mode: " << descriptor.m_coorAddrMode << "\n";
             if (descriptor.m_coorAddrMode == SHORT_ADDR)
@@ -57,7 +57,7 @@ ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
             std::cout << "   Page: " << static_cast<uint32_t>(descriptor.m_logChPage) << "\n";
             std::cout << "   GTS permit: " << descriptor.m_gtsPermit << "\n";
             std::cout << "   Superframe Spec: \n";
-            SuperframeField superframe = SuperframeField(descriptor.m_superframeSpec);
+            auto superframe = SuperframeField(descriptor.m_superframeSpec);
             std::cout << "      Beacon Order: "
                       << static_cast<uint32_t>(superframe.GetBeaconOrder()) << "\n";
             std::cout << "      Superframe Order: "

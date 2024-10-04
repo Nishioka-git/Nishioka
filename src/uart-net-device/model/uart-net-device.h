@@ -22,6 +22,14 @@ class Node;
 namespace uartnetdevice
 {
 
+/**
+ * A special NetDevice to establish communication with Lr-Wpan hardware devices (physical devices)
+ * compliant with devices implementing IEEE 802.15.4-2006 and IEEE 802.15.4-2011. This NetDevices
+ * establishes a UART serial connection with a physical device described by the provided port.
+ * Physical devices communicating with this NetDevice are required to run the designed Shim layer
+ * (companion application installed in the MCU) in order to achieve this co-processor service.
+ *
+ */
 class UartNetDevice : public NetDevice
 {
   public:
@@ -33,6 +41,14 @@ class UartNetDevice : public NetDevice
     static TypeId GetTypeId();
 
     UartNetDevice();
+
+    /**
+     * The Uart NetDevice constructor with port device parameter used to establish a serial
+     * connection with a NXP JN516x device.
+     *
+     * @param port The physical port identifier of the device to which this class instance will
+     * connect.
+     */
     UartNetDevice(std::string port);
     ~UartNetDevice() override;
 

@@ -14,7 +14,6 @@
 #include <ns3/traced-callback.h>
 #include <ns3/traced-value.h>
 
-#include <boost/asio.hpp>
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -50,6 +49,10 @@ enum PrimitiveType
     ORPHAN_IND = 10
 };
 
+/**
+ *  Implements the ns-3 lr-wpan class that communicates with the shim layer of a
+ *  NXP JN516x device.
+ */
 class UartLrWpanMac : public lrwpan::LrWpanMacBase
 {
   public:
@@ -64,6 +67,13 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
      * Default constructor.
      */
     UartLrWpanMac();
+    /**
+     * The constructor with port device parameter used to establish a serial connection with
+     * a NXP JN516x device.
+     *
+     * @param port The physical port identifier of the device to which this class instance will
+     * connect.
+     */
     UartLrWpanMac(const std::string& port);
     ~UartLrWpanMac() override;
 
@@ -93,44 +103,208 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
     void DoDispose() override;
 
   private:
+    /**
+     *  Helper function to add an uint8_t value into a uint8_t list.
+     *
+     * @param dataArray The list of uint8_t elements
+     * @param intValue  The uint8_t element to be added to the list.
+     */
     void Uint8ToBytes(std::vector<uint8_t>& dataArray, uint8_t intValue);
+
+    /**
+     *  Helper function to break and add an uint16_t value into a uint8_t list.
+     *
+     * @param dataArray The list of uint8_t elements
+     * @param intValue  The uint16_t element to be broken and added to the list.
+     */
     void Uint16ToBytes(std::vector<uint8_t>& dataArray, uint16_t intValue);
+
+    /**
+     *  Helper function to break and add a uint32_t value into a uint8_t list.
+     *
+     * @param dataArray The list of uint8_t elements
+     * @param intValue  The uint32_t element to be broken and added to the list.
+     */
     void Uint32ToBytes(std::vector<uint8_t>& dataArray, uint32_t intValue);
+
+    /**
+     *  Helper function to break and add a uint64_t value into a uint8_t list.
+     *
+     * @param dataArray The list of uint8_t elements
+     * @param intValue  The uint64_t element to be broken and added to the list.
+     */
     void Uint64ToBytes(std::vector<uint8_t>& dataArray, uint64_t intValue);
 
+    /**
+     * Helper function to extract a uint8_t value (1 byte) from a list of uint8_t elements.
+     *
+     * @param dataArray The list from which the value is extracted.
+     * @param pos The position in the list after the extraction of the element.
+     * @return The extracted uint8_t value (1 byte).
+     */
     uint8_t BytesToUint8(const std::vector<uint8_t>& dataArray, uint8_t& pos);
+
+    /**
+     * Helper function to extract a uint16_t value (2 bytes) from a list of uint8_t elements.
+     *
+     * @param dataArray The list from which the value is extracted.
+     * @param pos The position in the list after the extraction of the element.
+     * @return The extracted uint16_t value (2 bytes).
+     */
     uint16_t BytesToUint16(const std::vector<uint8_t>& dataArray, uint8_t& pos);
+
+    /**
+     * Helper function to extract a uint32_t value (4 bytes) from a list of uint8_t elements.
+     *
+     * @param dataArray The list from which the value is extracted.
+     * @param pos The position in the list after the extraction of the element.
+     * @return The extracted uint32_t value (4 bytes).
+     */
     uint32_t BytesToUint32(const std::vector<uint8_t>& dataArray, uint8_t& pos);
+
+    /**
+     * Helper function to extract a uint64_t value (8 bytes) from a list of uint8_t elements.
+     *
+     * @param dataArray The list from which the value is extracted.
+     * @param pos The position in the list after the extraction of the element.
+     * @return The extracted uint16_t value (8 bytes).
+     */
     uint64_t BytesToUint64(const std::vector<uint8_t>& dataArray, uint8_t& pos);
 
+    /**
+     * Used to open a serial connection to a NXP JN516x device.
+     */
     void OpenPort();
+
+    /**
+     * Asynchronously read a single byte received from the configured NXP JN516x device
+     * assigned to this class instance. Received bytes are analyzed and accumulated to
+     * further processing.
+     */
     void ReadByte();
+
+    /**
+     * Used to initiate the IO service necessary for the asynchronous operations in the configured
+     * NXP JN516x device.
+     */
     void RunIoService();
 
+    /**
+     * Function used to interpreted the accumulated received bytes and process the received data
+     * into IEEE 802.15.4 MAC common part sublayer (MCPS) and MAC layer management entity (MLME)
+     * services.
+     */
     void ProcessData();
 
+    /**
+     *  Process the received primitive parameters and triggers a MLME-SCAN.confirm
+     *  callback to be processed by next higher layer.
+     */
     void ScanConfirm();
+
+    /**
+     *  Process the received primitive parameters and triggers a MLME-START.confirm
+     *  callback to be processed by next higher layer.
+     */
     void StartConfirm();
+
+    /**
+     *  Process the received primitive parameters and triggers a MLME-ASSOCIATE.indication
+     *  callback to be processed by next higher layer.
+     */
     void AssociateIndication();
+
+    /**
+     *  Process the received primitive parameters and triggers a MLME-COMM-STATUS.indication
+     *  callback to be processed by next higher layer.
+     */
     void CommStatusIndication();
+
+    /**
+     *  Process the received primitive parameters and triggers a MLME-ASSOCIATE.confirm
+     *  callback to be processed by next higher layer.
+     */
     void AssociateConfirm();
+
+    /**
+     *  Process the received primitive parameters and triggers a MCPS-DATA.confirm
+     *  callback to be processed by next higher layer.
+     */
     void DataConfirm();
+
+    /**
+     *  Process the received primitive parameters and triggers a MCPS-DATA.indication
+     *  callback to be processed by next higher layer.
+     */
     void DataIndication();
+
+    /**
+     *  Process the received primitive parameters and triggers a MLME-SET.confirm
+     *  callback to be processed by next higher layer.
+     */
     void SetConfirm();
+
+    /**
+     *  Process the received primitive parameters and triggers a MLME-GET.confirm
+     *  callback to be processed by next higher layer.
+     */
     void GetConfirm();
+
+    /**
+     *  Process the received primitive parameters and triggers a MLME-ORPHAN.indication
+     *  callback to be processed by next higher layer.
+     */
     void OrphanIndication();
 
-    boost::asio::io_service m_ioService;
-    boost::asio::serial_port m_serial;
+    /**
+     * The port used by the NXP JN516x device associated to this instance.
+     * e.g. /dev/ttyUSB0
+     */
     std::string m_port;
-    std::thread m_ioServiceThread;
-    std::mutex mutex_;
 
+    /**
+     * The thread used to run the asynchronous serial communication IO service.
+     */
+    std::thread m_ioServiceThread;
+
+    /**
+     * The object used to handle the mutually exclusive zones.
+     */
+    std::mutex m_mutex;
+
+    /**
+     * The identifier of the currently used instance of a boost::serial_port object.
+     * Instances and their identifiers are stored in the static map serialPortInstances.
+     */
+    uint32_t m_currentInstanceId;
+
+    /**
+     *  Indicates the state of the current received data during its process to be interpreted
+     *  into primitives.
+     */
     ReadState m_rxState;
+
+    /**
+     * Used to store the type of IEEE 802.15.4 MAC primitive type
+     * last received.
+     */
     PrimitiveType m_rxPrimitiveType;
+
+    /**
+     * Stores the size in bytes of the parameters in last received IEEE 802.15.4 MAC primitive.
+     */
     uint32_t m_paramsMaxSize;
+
+    /**
+     *  The buffer of bytes for all the received unprocessed data.
+     */
     std::vector<uint8_t> m_rxData;
 
+    /**
+     * Counts the number of bytes since the last identified uprocessed primitive.
+     * Primitives are processed once the number of bytes counted equals to the m_paramsMaxSize
+     * identified.
+     */
     uint32_t m_rxByteCount;
 };
 
