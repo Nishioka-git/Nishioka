@@ -147,8 +147,12 @@ UartNetDevice::SetMtu(const uint16_t mtu)
 uint16_t
 UartNetDevice::GetMtu() const
 {
-    NS_ABORT_MSG("Unsupported");
-    return 0;
+    NS_LOG_FUNCTION(this);
+    // Maximum payload size is: max psdu - frame control - seqno - addressing - security - fcs
+    //                        = 127      - 2             - 1     - (2+2+2+2)  - 0        - 2
+    //                        = 114
+    // assuming no security and addressing with only 16 bit addresses without pan id compression.
+    return 114;
 }
 
 bool
