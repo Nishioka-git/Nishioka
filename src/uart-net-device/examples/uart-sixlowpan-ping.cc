@@ -7,17 +7,14 @@
  *  Alberto Gallegos Ramonet <alramonet@is.tokushima-u.ac.jp>
  */
 
-
-
-
-#include <ns3/core-module.h>
 #include "ns3/internet-apps-module.h"
 #include "ns3/internet-module.h"
-//#include "ns3/lr-wpan-module.h"
-//#include "ns3/mobility-module.h"
-//#include "ns3/propagation-module.h"
+#include <ns3/core-module.h>
+// #include "ns3/lr-wpan-module.h"
+// #include "ns3/mobility-module.h"
+// #include "ns3/propagation-module.h"
 #include "ns3/sixlowpan-module.h"
-//#include "ns3/spectrum-module.h"
+// #include "ns3/spectrum-module.h"
 #include <ns3/lr-wpan-fields.h>
 #include <ns3/uart-net-device.h>
 
@@ -53,10 +50,10 @@ main(int argc, char** argv)
         LogComponentEnable("SixLowPanNetDevice", LOG_LEVEL_ALL);
     }
 
-        // We are using a real piece of hardware, therefore we need to use realtime
+    // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
 
-       // Create 1 PAN coordinator node, and 1 end device
+    // Create 1 PAN coordinator node, and 1 end device
     Ptr<Node> coord1 = CreateObject<Node>();
     Ptr<UartNetDevice> coord1NetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB0");
     coord1->AddDevice(coord1NetDevice);
@@ -73,41 +70,38 @@ main(int argc, char** argv)
     uartDevices.Add(coord1NetDevice);
     uartDevices.Add(endNodeNetDevice);
 
+    /* NodeContainer nodes;
+     nodes.Create(2);
 
+     // Mobility is only representative as it has no effect when using
+     // real devices
+     MobilityHelper mobility;
+     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+     mobility.SetPositionAllocator("ns3::GridPositionAllocator",
+                                   "MinX",
+                                   DoubleValue(0.0),
+                                   "MinY",
+                                   DoubleValue(0.0),
+                                   "DeltaX",
+                                   DoubleValue(20),
+                                   "DeltaY",
+                                   DoubleValue(20),
+                                   "GridWidth",
+                                   UintegerValue(3),
+                                   "LayoutType",
+                                   StringValue("RowFirst"));
+     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+     mobility.Install(nodes);
 
+     LrWpanHelper lrWpanHelper;
+     lrWpanHelper.SetPropagationDelayModel("ns3::ConstantSpeedPropagationDelayModel");
+     lrWpanHelper.AddPropagationLossModel("ns3::LogDistancePropagationLossModel");
+     // Add and install the LrWpanNetDevice for each node
+     NetDeviceContainer lrwpanDevices = lrWpanHelper.Install(nodes);
 
-   /* NodeContainer nodes;
-    nodes.Create(2);
-
-    // Mobility is only representative as it has no effect when using
-    // real devices
-    MobilityHelper mobility;
-    mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    mobility.SetPositionAllocator("ns3::GridPositionAllocator",
-                                  "MinX",
-                                  DoubleValue(0.0),
-                                  "MinY",
-                                  DoubleValue(0.0),
-                                  "DeltaX",
-                                  DoubleValue(20),
-                                  "DeltaY",
-                                  DoubleValue(20),
-                                  "GridWidth",
-                                  UintegerValue(3),
-                                  "LayoutType",
-                                  StringValue("RowFirst"));
-    mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    mobility.Install(nodes);
-
-    LrWpanHelper lrWpanHelper;
-    lrWpanHelper.SetPropagationDelayModel("ns3::ConstantSpeedPropagationDelayModel");
-    lrWpanHelper.AddPropagationLossModel("ns3::LogDistancePropagationLossModel");
-    // Add and install the LrWpanNetDevice for each node
-    NetDeviceContainer lrwpanDevices = lrWpanHelper.Install(nodes);
-
-    // Manual PAN association and extended and short address assignment.
-    // Association using the MAC functions can also be used instead of this step.
-    lrWpanHelper.CreateAssociatedPan(lrwpanDevices, 1);*/
+     // Manual PAN association and extended and short address assignment.
+     // Association using the MAC functions can also be used instead of this step.
+     lrWpanHelper.CreateAssociatedPan(lrwpanDevices, 1);*/
 
     // Manually set the PANID and the short address of the devices to
     // enable the communication in lr-wpan devices.
@@ -120,7 +114,6 @@ main(int argc, char** argv)
                                    MacPibAttributeIdentifier::macShortAddress,
                                    pibAttr1);
 
-
     Ptr<MacPibAttributes> pibAttr2 = Create<MacPibAttributes>();
     pibAttr2->macShortAddress = Mac16Address("00:02");
     Simulator::ScheduleWithContext(endNodeNetDevice->GetNode()->GetId(),
@@ -129,7 +122,6 @@ main(int argc, char** argv)
                                    endNodeNetDevice->GetMac(),
                                    MacPibAttributeIdentifier::macShortAddress,
                                    pibAttr2);
-
 
     Ptr<MacPibAttributes> pibAttr3 = Create<MacPibAttributes>();
     pibAttr3->macPanId = 0xCAFE;
@@ -140,7 +132,6 @@ main(int argc, char** argv)
                                    MacPibAttributeIdentifier::macPanId,
                                    pibAttr3);
 
-
     Ptr<MacPibAttributes> pibAttr4 = Create<MacPibAttributes>();
     pibAttr4->macPanId = 0xCAFE;
     Simulator::ScheduleWithContext(endNodeNetDevice->GetNode()->GetId(),
@@ -149,8 +140,6 @@ main(int argc, char** argv)
                                    endNodeNetDevice->GetMac(),
                                    MacPibAttributeIdentifier::macPanId,
                                    pibAttr4);
-
-
 
     InternetStackHelper internetv6;
     internetv6.Install(nodes);
@@ -163,28 +152,29 @@ main(int argc, char** argv)
     Ipv6InterfaceContainer deviceInterfaces;
     deviceInterfaces = ipv6.Assign(devices);
 
-    if (enableLSixlowLogLevelInfo)
-    {
-        std::cout << "Device 0: pseudo-Mac-48 "
-                  << Mac48Address::ConvertFrom(devices.Get(0)->GetAddress()) << ", IPv6 Address "
-                  << deviceInterfaces.GetAddress(0, 1) << std::endl;
-        std::cout << "Device 1: pseudo-Mac-48 "
-                  << Mac48Address::ConvertFrom(devices.Get(1)->GetAddress()) << ", IPv6 Address "
-                  << deviceInterfaces.GetAddress(1, 1) << std::endl;
-    }
+    /* if (enableLSixlowLogLevelInfo)
+     {
+         std::cout << "Device 0: pseudo-Mac-48 "
+                   << Mac48Address::ConvertFrom(devices.Get(0)->GetAddress()) << ", IPv6 Address "
+                   << deviceInterfaces.GetAddress(0, 1) << std::endl;
+         std::cout << "Device 1: pseudo-Mac-48 "
+                   << Mac48Address::ConvertFrom(devices.Get(1)->GetAddress()) << ", IPv6 Address "
+                   << deviceInterfaces.GetAddress(1, 1) << std::endl;
+     }*/
 
-    uint32_t packetSize = 16;
-    uint32_t maxPacketCount = 5;
-    Time interPacketInterval = Seconds(1.);
-    PingHelper ping(deviceInterfaces.GetAddress(1, 1));
+    /* uint32_t packetSize = 16;
+     uint32_t maxPacketCount = 5;
+     Time interPacketInterval = Seconds(1.);
+     PingHelper ping(deviceInterfaces.GetAddress(1, 1));
 
-    ping.SetAttribute("Count", UintegerValue(maxPacketCount));
-    ping.SetAttribute("Interval", TimeValue(interPacketInterval));
-    ping.SetAttribute("Size", UintegerValue(packetSize));
-    ApplicationContainer apps = ping.Install(nodes.Get(0));
+     ping.SetAttribute("Count", UintegerValue(maxPacketCount));
+     ping.SetAttribute("Interval", TimeValue(interPacketInterval));
+     ping.SetAttribute("Size", UintegerValue(packetSize));
+     ApplicationContainer apps = ping.Install(nodes.Get(0));
 
-    apps.Start(Seconds(2.0));
-    apps.Stop(Seconds(20.0));
+     apps.Start(Seconds(2.0));
+     apps.Stop(Seconds(20.0));
+     */
 
     /*if (!disableAsciiTrace)
     {

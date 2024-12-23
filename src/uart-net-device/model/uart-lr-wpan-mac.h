@@ -59,7 +59,7 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
     /**
      * Get the type ID.
      *
-     * \return the object TypeId
+     * @return the object TypeId
      */
     static TypeId GetTypeId();
 
@@ -77,6 +77,7 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
     UartLrWpanMac(const std::string& port);
     ~UartLrWpanMac() override;
 
+    // Inherited from LrWpanMacBase
     void McpsDataRequest(lrwpan::McpsDataRequestParams params, Ptr<Packet> p) override;
 
     void MlmeStartRequest(lrwpan::MlmeStartRequestParams params) override;
@@ -100,6 +101,7 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
 
   protected:
     // Inherited from Object.
+    void DoInitialize() override;
     void DoDispose() override;
 
   private:

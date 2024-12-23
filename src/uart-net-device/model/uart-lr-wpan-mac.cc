@@ -24,16 +24,16 @@ namespace uartnetdevice
 /**
  *  The IO service used to provide asynchronous serial communication. This service is used by
  *  the serial port instances.
- *  This is declared as a static variable to avoid "cppyyy undefined symbols" errors in
- *  the python bindings when using external libraries such as boost.
+ *  This is declared as a static variable in here to avoid "cppyyy undefined symbols" errors in
+ *  the python bindings when using external libraries such as the present boost library.
  */
 static boost::asio::io_service g_ioService;
 
 /**
  *  Map containing the serial port instances necessary to realize serial communication
  *  with hardware devices.
- *  This is declared as a static variable to avoid "cppyyy undefined symbols" errors in
- *  the python bindings when using external libraries such as boost.
+ *  This is declared as a static variable in here to avoid "cppyyy undefined symbols" errors in
+ *  the python bindings when using external libraries such as the present boost library.
  */
 static std::map<uint32_t, boost::asio::serial_port> g_serialPortInstances;
 
@@ -61,6 +61,8 @@ UartLrWpanMac::UartLrWpanMac()
 UartLrWpanMac::UartLrWpanMac(const std::string& port)
     : m_port(port)
 {
+    NS_LOG_FUNCTION(this);
+
     m_currentInstanceId = g_serialPortInstances.size();
     g_serialPortInstances.insert(
         {g_serialPortInstances.size(), boost::asio::serial_port(g_ioService)});
@@ -75,8 +77,22 @@ UartLrWpanMac::UartLrWpanMac(const std::string& port)
     m_ioServiceThread = std::thread([this] { RunIoService(); });
 }
 
+void
+UartLrWpanMac::DoInitialize()
+{
+    NS_LOG_FUNCTION(this);
+}
+
 UartLrWpanMac::~UartLrWpanMac()
 {
+    NS_LOG_FUNCTION(this);
+}
+
+void
+UartLrWpanMac::DoDispose()
+{
+    NS_LOG_FUNCTION(this);
+
     g_serialPortInstances.at(m_currentInstanceId).close();
     if (!g_ioService.stopped())
     {
@@ -84,6 +100,21 @@ UartLrWpanMac::~UartLrWpanMac()
     }
 
     m_ioServiceThread.join();
+
+    m_mcpsDataConfirmCallback = MakeNullCallback<void, McpsDataConfirmParams>();
+    m_mcpsDataIndicationCallback = MakeNullCallback<void, McpsDataIndicationParams, Ptr<Packet>>();
+    m_mlmeStartConfirmCallback = MakeNullCallback<void, MlmeStartConfirmParams>();
+    m_mlmeBeaconNotifyIndicationCallback =
+        MakeNullCallback<void, MlmeBeaconNotifyIndicationParams>();
+    m_mlmeSyncLossIndicationCallback = MakeNullCallback<void, MlmeSyncLossIndicationParams>();
+    m_mlmePollConfirmCallback = MakeNullCallback<void, MlmePollConfirmParams>();
+    m_mlmeScanConfirmCallback = MakeNullCallback<void, MlmeScanConfirmParams>();
+    m_mlmeAssociateConfirmCallback = MakeNullCallback<void, MlmeAssociateConfirmParams>();
+    m_mlmeAssociateIndicationCallback = MakeNullCallback<void, MlmeAssociateIndicationParams>();
+    m_mlmeCommStatusIndicationCallback = MakeNullCallback<void, MlmeCommStatusIndicationParams>();
+    m_mlmeOrphanIndicationCallback = MakeNullCallback<void, MlmeOrphanIndicationParams>();
+    m_mlmeSetConfirmCallback = MakeNullCallback<void, MlmeSetConfirmParams>();
+    Object::DoDispose();
 }
 
 void
@@ -456,25 +487,6 @@ UartLrWpanMac::MlmeGetRequest(MacPibAttributeIdentifier id)
 }
 
 void
-UartLrWpanMac::DoDispose()
-{
-    m_mcpsDataConfirmCallback = MakeNullCallback<void, McpsDataConfirmParams>();
-    m_mcpsDataIndicationCallback = MakeNullCallback<void, McpsDataIndicationParams, Ptr<Packet>>();
-    m_mlmeStartConfirmCallback = MakeNullCallback<void, MlmeStartConfirmParams>();
-    m_mlmeBeaconNotifyIndicationCallback =
-        MakeNullCallback<void, MlmeBeaconNotifyIndicationParams>();
-    m_mlmeSyncLossIndicationCallback = MakeNullCallback<void, MlmeSyncLossIndicationParams>();
-    m_mlmePollConfirmCallback = MakeNullCallback<void, MlmePollConfirmParams>();
-    m_mlmeScanConfirmCallback = MakeNullCallback<void, MlmeScanConfirmParams>();
-    m_mlmeAssociateConfirmCallback = MakeNullCallback<void, MlmeAssociateConfirmParams>();
-    m_mlmeAssociateIndicationCallback = MakeNullCallback<void, MlmeAssociateIndicationParams>();
-    m_mlmeCommStatusIndicationCallback = MakeNullCallback<void, MlmeCommStatusIndicationParams>();
-    m_mlmeOrphanIndicationCallback = MakeNullCallback<void, MlmeOrphanIndicationParams>();
-    m_mlmeSetConfirmCallback = MakeNullCallback<void, MlmeSetConfirmParams>();
-    Object::DoDispose();
-}
-
-void
 UartLrWpanMac::Uint8ToBytes(std::vector<uint8_t>& dataArray, uint8_t intValue)
 {
     dataArray.emplace_back(intValue);
@@ -565,7 +577,7 @@ UartLrWpanMac::OpenPort()
             .set_option(
                 boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
 
-        std::cout << "Connected to port: " << m_port << "\n";
+        NS_LOG_DEBUG("Connected to port: " << m_port);
     }
     catch (const boost::system::system_error& e)
     {

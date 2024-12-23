@@ -17,6 +17,8 @@
 #include <ns3/pointer.h>
 #include <ns3/spectrum-channel.h>
 
+using namespace ns3::lrwpan;
+
 namespace ns3
 {
 namespace uartnetdevice
@@ -54,7 +56,6 @@ void
 UartNetDevice::DoDispose()
 {
     NS_LOG_FUNCTION(this);
-    m_mac->Dispose();
     m_mac = nullptr;
     m_node = nullptr;
     // chain up.
@@ -65,7 +66,8 @@ void
 UartNetDevice::DoInitialize()
 {
     NS_LOG_FUNCTION(this);
-    m_mac->Initialize();
+    // m_mac->Initialize();
+    AggregateObject(m_mac);
     NetDevice::DoInitialize();
 }
 
@@ -79,6 +81,13 @@ Ptr<UartLrWpanMac>
 UartNetDevice::GetMac() const
 {
     return m_mac;
+}
+
+void
+UartNetDevice::SetPanAssociation(uint16_t panId,
+                                 Mac16Address coordShortAddr,
+                                 Mac16Address assignedShortAddr)
+{
 }
 
 void
@@ -114,6 +123,19 @@ UartNetDevice::LinkDown()
 {
     NS_LOG_FUNCTION(this);
     m_linkUp = false;
+}
+
+void
+UartNetDevice::MlmeSetConfirm(MlmeSetConfirmParams params)
+{
+    /*if (params.m_status == MacStatus::SUCCESS)
+    {
+        switch(params.id)
+        {
+            case lrwpan::MacPibAttributeIdentifier::macPanId:
+
+        }
+    }*/
 }
 
 void

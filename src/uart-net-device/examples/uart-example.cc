@@ -144,9 +144,10 @@ DataConfirm(Ptr<UartNetDevice> device, McpsDataConfirmParams params)
 static void
 DataIndication(Ptr<UartNetDevice> device, McpsDataIndicationParams params, Ptr<Packet> p)
 {
-    auto bufferPtr = new uint8_t[p->GetSize()];
-    p->CopyData(bufferPtr, p->GetSize());
-    std::string data = std::string((char*)bufferPtr);
+    std::vector<uint8_t> buffer;
+    buffer.resize(p->GetSize());
+    p->CopyData(buffer.data(), p->GetSize());
+    std::string data(buffer.begin(), buffer.end());
 
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Data Indication | Packet received with :\n"

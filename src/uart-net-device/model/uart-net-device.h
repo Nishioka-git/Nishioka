@@ -66,23 +66,35 @@ class UartNetDevice : public NetDevice
      */
     Ptr<UartLrWpanMac> GetMac() const;
 
+    /**
+     * This method is use to manually configure the coordinator through
+     * which the device or coordinator is associated. When assigning a short address
+     * the extended address must also be present.
+     *
+     * @param panId The id of the PAN used by the coordinator device.
+     *
+     * @param coordShortAddr The coordinator assigned short address through which this
+     *                       device or coordinator is associated.
+     *                       [FF:FF] address indicates that the value is unknown.
+     *                       [FF:FE] indicates that the associated coordinator is using only
+     *                       its extended address.
+     *
+     * @param assignedShortAddr The assigned short address for this device.
+     *                          [FF:FF] address indicates that the device have no short address
+     *                                  and is not associated.
+     *                          [FF:FE] address indicates that the devices has associated but
+     *                          has not been allocated a short address.
+     */
+    void SetPanAssociation(uint16_t panId,
+                           Mac16Address coordShortAddr,
+                           Mac16Address assignedShortAddr);
+
     // From class NetDevice
     void SetIfIndex(const uint32_t index) override;
     uint32_t GetIfIndex() const override;
     Ptr<Channel> GetChannel() const override;
-
-    /**
-     * This method indirects to LrWpanMac::SetShortAddress ()
-     * @param address The short address.
-     */
     void SetAddress(Address address) override;
-
-    /**
-     * This method indirects to LrWpanMac::SetShortAddress ()
-     * @return The short address.
-     */
     Address GetAddress() const override;
-
     bool SetMtu(const uint16_t mtu) override;
     uint16_t GetMtu() const override;
     bool IsLinkUp() const override;
@@ -121,6 +133,15 @@ class UartNetDevice : public NetDevice
      * Mark NetDevice link as down.
      */
     void LinkDown();
+
+    /**
+     * IEEE 802.15.4-2011 section 6.2.11.2
+     * MLME-SET.confirm
+     * Reports the result of an attempt to change a MAC PIB attribute.
+     *
+     * @param params The MLME-SET.confirm params
+     */
+    void MlmeSetConfirm(lrwpan::MlmeSetConfirmParams params);
 
     /**
      * The MAC for this NetDevice.
