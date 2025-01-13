@@ -137,7 +137,7 @@ UartLrWpanMac::McpsDataRequest(McpsDataRequestParams params, Ptr<Packet> p)
     // Payload (variable)
     uint8_t parametersSize = 7;
 
-    if (params.m_dstAddrMode == EXT_ADDR)
+    if (params.m_dstAddrMode == lrwpan::AddressMode::EXT_ADDR)
     {
         parametersSize += 8;
     }
@@ -701,6 +701,9 @@ UartLrWpanMac::ProcessData()
     case ORPHAN_IND:
         OrphanIndication();
         break;
+    case BEACON_NOTIFY_IND:
+        BeaconNotifyIndication();
+        break;
     default:
         std::cout << "Unknown Primitive with code " << static_cast<uint32_t>(m_rxPrimitiveType)
                   << " received \n";
@@ -718,11 +721,8 @@ UartLrWpanMac::ScanConfirm()
 
     params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
     params.m_scanType = static_cast<MlmeScanType>(BytesToUint8(m_rxData, pos));
-
-    // params.m_unscannedCh = BytesToUint32(2, m_rxData); //TODO
-    BytesToUint32(m_rxData, pos);
+     BytesToUint32(m_rxData, pos); // TODO params.m_unscannedCh = BytesToUint32(m_rxData, pos);
     params.m_resultListSize = BytesToUint8(m_rxData, pos);
-
     if (params.m_status == MacStatus::SUCCESS)
     {
         if (params.m_scanType == MLMESCAN_ED)
@@ -746,7 +746,6 @@ UartLrWpanMac::ScanConfirm()
                     static_cast<lrwpan::AddressMode>(BytesToUint8(m_rxData, pos));
 
                 panDescriptor.m_coorPanId = BytesToUint16(m_rxData, pos);
-
                 if (panDescriptor.m_coorAddrMode == SHORT_ADDR)
                 {
                     panDescriptor.m_coorShortAddr = Mac16Address(BytesToUint16(m_rxData, pos));
@@ -761,7 +760,6 @@ UartLrWpanMac::ScanConfirm()
                 panDescriptor.m_superframeSpec = BytesToUint16(m_rxData, pos);
                 panDescriptor.m_gtsPermit = BytesToUint8(m_rxData, pos);
                 panDescriptor.m_linkQuality = BytesToUint8(m_rxData, pos);
-
                 // panDescriptor.m_timeStamp
                 BytesToUint32(m_rxData, pos);
 
@@ -983,6 +981,62 @@ UartLrWpanMac::OrphanIndication()
         // TODO: Add security parameters when supported
         m_mlmeOrphanIndicationCallback(params);
     }
+}
+
+void
+UartLrWpanMac::BeaconNotifyIndication()
+{
+   if (!m_mlmeBeaconNotifyIndicationCallback.IsNull())
+   {
+       MlmeBeaconNotifyIndicationParams params;
+       uint8_t pos = 0;
+
+       params.m_bsn = BytesToUint8(m_rxData, pos);
+       params.m_panDescriptor.m_coorAddrMode =
+          static_cast<lrwpan::AddressMode>(BytesToUint8(m_rxData, pos));
+       params.m_panDescriptor.m_coorPanId = BytesToUint16(m_rxData, pos);
+       if (params.m_panDescriptor.m_coorAddrMode == lrwpan::AddressMode::EXT_ADDR)
+       {
+           BytesToUint64(m_rxData, pos);
+       }
+       else
+       {
+           BytesToUint16(m_rxData, pos);
+       }
+       params.m_panDescriptor.m_logCh = BytesToUint8(m_rxData, pos);
+       params.m_panDescriptor.m_logChPage = BytesToUint8(m_rxData, pos);
+       params.m_panDescriptor.m_superframeSpec = BytesToUint16(m_rxData, pos);
+       params.m_panDescriptor.m_gtsPermit = BytesToUint8(m_rxData, pos);
+       params.m_panDescriptor.m_linkQuality = BytesToUint8(m_rxData, pos);
+       // TODO:params.m_panDescriptor.m_timeStamp // not supported
+       BytesToUint32(m_rxData, pos);
+       // TODO: Add pan descriptor security parameters here when supported
+
+       // TODO: Pending address specification field and pending address list missing,
+       //       add to beacon notify params when available
+       uint8_t pendingAddrSpecField = BytesToUint8(m_rxData, pos);
+       uint8_t numPendingShortAddr = pendingAddrSpecField & (0x07); // bits 0-2
+	   uint8_t numPendingExtAddr =  (pendingAddrSpecField & 0x70) >> 4; // bits 4-6;
+       for (uint8_t i = 0; i < numPendingShortAddr; i++)
+       {
+           BytesToUint16(m_rxData, pos);
+       }
+
+       for (uint8_t i = 0; i < numPendingExtAddr; i++)
+       {
+           BytesToUint64(m_rxData, pos);
+       }
+
+       params.m_sduLength = BytesToUint8(m_rxData, pos);
+       std::vector<uint8_t> sdu;
+       for (uint8_t z = 0; z < params.m_sduLength; z++)
+       {
+           sdu.emplace_back(BytesToUint8(m_rxData, pos));
+       }
+       params.m_sdu = Create<Packet>(sdu.data(), sdu.size());
+
+       m_mlmeBeaconNotifyIndicationCallback(params);
+   }
 }
 
 void

@@ -29,7 +29,7 @@
  *  2-
  */
 
-/*#include <ns3/constant-position-mobility-model.h>
+#include <ns3/constant-position-mobility-model.h>
 #include "ns3/network-module.h"
 #include <ns3/core-module.h>
 #include <ns3/log.h>
@@ -43,7 +43,7 @@
 #include <ns3/uart-net-device.h>
 #include <ns3/zigbee-module.h>
 
-#include <iostream>*/
+#include <iostream>
 
 using namespace ns3;
 using namespace ns3::lrwpan;
@@ -199,7 +199,7 @@ main(int argc, char* argv[])
     NlmeNetworkDiscoveryRequestParams netDiscParams;
     netDiscParams.m_scanChannelList.channelPageCount = 1;
     netDiscParams.m_scanChannelList.channelsField[0] = 0x7800;
-    netDiscParams.m_scanDuration = 14;
+    netDiscParams.m_scanDuration = 7;
     Simulator::ScheduleWithContext(zstack1->GetNode()->GetId(),
                                    Seconds(3.0),
                                    &ZigbeeNwk::NlmeNetworkDiscoveryRequest,

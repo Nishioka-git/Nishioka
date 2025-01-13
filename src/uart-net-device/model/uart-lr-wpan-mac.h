@@ -46,7 +46,8 @@ enum PrimitiveType
     DATA_IND = 7,
     SET_CFM = 8,
     GET_CFM = 9,
-    ORPHAN_IND = 10
+    ORPHAN_IND = 10,
+    BEACON_NOTIFY_IND = 11
 };
 
 /**
@@ -257,6 +258,12 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
      *  callback to be processed by next higher layer.
      */
     void OrphanIndication();
+
+    /**
+     * Process the received primitive parameters and triggers a MLME-BEACON-NOTIFY.indication
+     * callback to be processed by the next higher layer.
+     */
+    void BeaconNotifyIndication();
 
     /**
      * The port used by the NXP JN516x device associated to this instance.
