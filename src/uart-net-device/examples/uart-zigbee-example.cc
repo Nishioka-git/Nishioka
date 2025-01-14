@@ -206,6 +206,19 @@ main(int argc, char* argv[])
                                    zstack1->GetNwk(),
                                    netDiscParams);
 
+    Ptr<Packet> p = Create<Packet>(5);
+    NldeDataRequestParams dataReqParams;
+    dataReqParams.m_dstAddrMode = UCST_BCST;
+    dataReqParams.m_dstAddr = zstack1->GetNwk()->GetNetworkAddress();
+    dataReqParams.m_nsduHandle = 1;
+    dataReqParams.m_discoverRoute = ENABLE_ROUTE_DISCOVERY;
+    Simulator::ScheduleWithContext(zstack0->GetNode()->GetId(),
+                                   Seconds(8),
+                                   &ZigbeeNwk::NldeDataRequest,
+                                   zstack0->GetNwk(),
+                                   dataReqParams,
+                                   p);
+
     Simulator::Stop(Seconds(60));
     Simulator::Run();
     Simulator::Destroy();
