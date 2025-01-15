@@ -61,7 +61,7 @@ NwkDataIndication(Ptr<ZigbeeStack> stack, NldeDataIndicationParams params, Ptr<P
 static void
 NwkNetworkFormationConfirm(Ptr<ZigbeeStack> stack, NlmeNetworkFormationConfirmParams params)
 {
-    std::cout << "NlmeNetworkFormationConfirmStatus = " << static_cast<uint32_t>(params.m_status)
+    std::cout << "NlmeNetworkFormationConfirmStatus = " << params.m_status
               << "\n";
 }
 
@@ -158,6 +158,7 @@ main(int argc, char* argv[])
     uartDevices.Add(uartNetDevice);
     uartDevices.Add(uartNetDevice2);
 
+
     ZigbeeHelper zigbee;
     ZigbeeStackContainer zigbeeStackContainer = zigbee.Install(uartDevices);
 
@@ -196,7 +197,7 @@ main(int argc, char* argv[])
 
     // 2- Let the dev1 (Router) discovery the coordinator and join the network, after
     //    this, it will become router itself(call to NLME-START-ROUTER.request).
-    NlmeNetworkDiscoveryRequestParams netDiscParams;
+   /* NlmeNetworkDiscoveryRequestParams netDiscParams;
     netDiscParams.m_scanChannelList.channelPageCount = 1;
     netDiscParams.m_scanChannelList.channelsField[0] = 0x7800;
     netDiscParams.m_scanDuration = 7;
@@ -204,22 +205,22 @@ main(int argc, char* argv[])
                                    Seconds(3.0),
                                    &ZigbeeNwk::NlmeNetworkDiscoveryRequest,
                                    zstack1->GetNwk(),
-                                   netDiscParams);
+                                   netDiscParams);*/
 
-    Ptr<Packet> p = Create<Packet>(5);
+    /*Ptr<Packet> p = Create<Packet>(5);
     NldeDataRequestParams dataReqParams;
     dataReqParams.m_dstAddrMode = UCST_BCST;
-    dataReqParams.m_dstAddr = zstack1->GetNwk()->GetNetworkAddress();
+    dataReqParams.m_dstAddr = Mac16Address("00:00");
     dataReqParams.m_nsduHandle = 1;
     dataReqParams.m_discoverRoute = ENABLE_ROUTE_DISCOVERY;
-    Simulator::ScheduleWithContext(zstack0->GetNode()->GetId(),
-                                   Seconds(8),
+    Simulator::ScheduleWithContext(zstack1->GetNode()->GetId(),
+                                   Seconds(10),
                                    &ZigbeeNwk::NldeDataRequest,
-                                   zstack0->GetNwk(),
+                                   zstack1->GetNwk(),
                                    dataReqParams,
-                                   p);
+                                   p);*/
 
-    Simulator::Stop(Seconds(60));
+    Simulator::Stop(Seconds(10));
     Simulator::Run();
     Simulator::Destroy();
     return 0;
