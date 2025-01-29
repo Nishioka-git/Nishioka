@@ -29,8 +29,8 @@
  *  2-
  */
 
-#include <ns3/constant-position-mobility-model.h>
 #include "ns3/network-module.h"
+#include <ns3/constant-position-mobility-model.h>
 #include <ns3/core-module.h>
 #include <ns3/log.h>
 #include <ns3/lr-wpan-fields.h>
@@ -61,8 +61,7 @@ NwkDataIndication(Ptr<ZigbeeStack> stack, NldeDataIndicationParams params, Ptr<P
 static void
 NwkNetworkFormationConfirm(Ptr<ZigbeeStack> stack, NlmeNetworkFormationConfirmParams params)
 {
-    std::cout << "NlmeNetworkFormationConfirmStatus = " << params.m_status
-              << "\n";
+    std::cout << "NlmeNetworkFormationConfirmStatus = " << params.m_status << "\n";
 }
 
 static void
@@ -131,12 +130,13 @@ NwkJoinConfirm(Ptr<ZigbeeStack> stack, NlmeJoinConfirmParams params)
 int
 main(int argc, char* argv[])
 {
-    LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC | LOG_PREFIX_NODE));
+    LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC));
+    // LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC | LOG_PREFIX_NODE));
     LogComponentEnable("ZigbeeNwk", LOG_LEVEL_DEBUG);
-    LogComponentEnable("ZigbeeStack", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("ZigbeeStack", LOG_LEVEL_DEBUG);
 
-    LogComponentEnable("UartLrWpanMac", LOG_LEVEL_DEBUG);
-    LogComponentEnable("UartNetDevice", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("UartLrWpanMac", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("UartNetDevice", LOG_LEVEL_DEBUG);
 
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
@@ -157,7 +157,6 @@ main(int argc, char* argv[])
     NetDeviceContainer uartDevices;
     uartDevices.Add(uartNetDevice);
     uartDevices.Add(uartNetDevice2);
-
 
     ZigbeeHelper zigbee;
     ZigbeeStackContainer zigbeeStackContainer = zigbee.Install(uartDevices);
@@ -197,7 +196,7 @@ main(int argc, char* argv[])
 
     // 2- Let the dev1 (Router) discovery the coordinator and join the network, after
     //    this, it will become router itself(call to NLME-START-ROUTER.request).
-   /* NlmeNetworkDiscoveryRequestParams netDiscParams;
+    NlmeNetworkDiscoveryRequestParams netDiscParams;
     netDiscParams.m_scanChannelList.channelPageCount = 1;
     netDiscParams.m_scanChannelList.channelsField[0] = 0x7800;
     netDiscParams.m_scanDuration = 7;
@@ -205,22 +204,22 @@ main(int argc, char* argv[])
                                    Seconds(3.0),
                                    &ZigbeeNwk::NlmeNetworkDiscoveryRequest,
                                    zstack1->GetNwk(),
-                                   netDiscParams);*/
+                                   netDiscParams);
 
-    /*Ptr<Packet> p = Create<Packet>(5);
+    Ptr<Packet> p = Create<Packet>(5);
     NldeDataRequestParams dataReqParams;
     dataReqParams.m_dstAddrMode = UCST_BCST;
     dataReqParams.m_dstAddr = Mac16Address("00:00");
     dataReqParams.m_nsduHandle = 1;
     dataReqParams.m_discoverRoute = ENABLE_ROUTE_DISCOVERY;
     Simulator::ScheduleWithContext(zstack1->GetNode()->GetId(),
-                                   Seconds(10),
+                                   Seconds(15),
                                    &ZigbeeNwk::NldeDataRequest,
                                    zstack1->GetNwk(),
                                    dataReqParams,
-                                   p);*/
+                                   p);
 
-    Simulator::Stop(Seconds(10));
+    Simulator::Stop(Seconds(20));
     Simulator::Run();
     Simulator::Destroy();
     return 0;

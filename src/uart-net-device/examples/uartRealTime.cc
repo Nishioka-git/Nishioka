@@ -10,11 +10,10 @@
 #include "ns3/network-module.h"
 #include <ns3/core-module.h>
 #include <ns3/log.h>
-
+#include <ns3/lr-wpan-module.h>
 #include <ns3/packet.h>
 #include <ns3/simulator.h>
 #include <ns3/uart-net-device.h>
-#include <ns3/lr-wpan-module.h>
 
 #include <iostream>
 
@@ -36,8 +35,8 @@ ScanConfirm(Ptr<LrWpanNetDevice> device, MlmeScanConfirmParams params)
             std::cout << static_cast<uint32_t>(energy) << "\n";
         }
     }
-}*/
-
+}
+*/
 static void
 ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
 {
@@ -60,20 +59,13 @@ main(int argc, char* argv[])
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
 
-
-
-
-
-     Ptr<Node> node = CreateObject<Node>();
+    Ptr<Node> node = CreateObject<Node>();
     Ptr<UartNetDevice> uartNetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB0");
     node->AddDevice(uartNetDevice);
-
 
     // Device Confirm primitives callback hooks
     uartNetDevice->GetMac()->SetMlmeScanConfirmCallback(
         MakeBoundCallback(&ScanConfirm, uartNetDevice));
-
-
 
     // Test MLME-SCAN.request (ENERGY DETECTION)
     MlmeScanRequestParams scanParams;
@@ -86,8 +78,7 @@ main(int argc, char* argv[])
                                    uartNetDevice->GetMac(),
                                    scanParams);
 
-
-   /* Ptr<Node> node = CreateObject<Node>();
+    /*Ptr<Node> node = CreateObject<Node>();
     Ptr<LrWpanNetDevice> lrWpanNetdevice = Create<LrWpanNetDevice> ();
     node->AddDevice(lrWpanNetdevice);
 
@@ -99,7 +90,7 @@ main(int argc, char* argv[])
     scanParams.m_scanDuration = 3;
     scanParams.m_scanType = MLMESCAN_ED;
     Simulator::ScheduleWithContext(lrWpanNetdevice->GetNode()->GetId(),
-                                   Seconds(5),
+                                   Seconds(2),
                                    &LrWpanMac::MlmeScanRequest,
                                    lrWpanNetdevice->GetMac(),
                                    scanParams);*/

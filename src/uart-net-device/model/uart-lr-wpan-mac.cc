@@ -14,6 +14,9 @@
 #include <boost/asio.hpp>
 #include <map>
 
+#undef NS_LOG_APPEND_CONTEXT
+#define NS_LOG_APPEND_CONTEXT
+
 using namespace ns3::lrwpan;
 
 namespace ns3
@@ -636,6 +639,10 @@ UartLrWpanMac::ReadByte()
                                    m_rxByteCount++;
                                    if (m_rxByteCount == m_paramsMaxSize)
                                    {
+                                       // Simulator::ScheduleWithContext(m_nodeId,Seconds(0),&UartLrWpanMac::ProcessData,
+                                       // this);
+                                       // Simulator::Schedule(Time(0), &UartLrWpanMac::ProcessData,
+                                       // this);
                                        ProcessData();
                                        m_rxState = RX_START;
                                        m_rxData.clear();
@@ -721,7 +728,7 @@ UartLrWpanMac::ScanConfirm()
 
     params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
     params.m_scanType = static_cast<MlmeScanType>(BytesToUint8(m_rxData, pos));
-     BytesToUint32(m_rxData, pos); // TODO params.m_unscannedCh = BytesToUint32(m_rxData, pos);
+    BytesToUint32(m_rxData, pos); // TODO params.m_unscannedCh = BytesToUint32(m_rxData, pos);
     params.m_resultListSize = BytesToUint8(m_rxData, pos);
     if (params.m_status == MacStatus::SUCCESS)
     {
@@ -986,57 +993,57 @@ UartLrWpanMac::OrphanIndication()
 void
 UartLrWpanMac::BeaconNotifyIndication()
 {
-   if (!m_mlmeBeaconNotifyIndicationCallback.IsNull())
-   {
-       MlmeBeaconNotifyIndicationParams params;
-       uint8_t pos = 0;
+    if (!m_mlmeBeaconNotifyIndicationCallback.IsNull())
+    {
+        MlmeBeaconNotifyIndicationParams params;
+        uint8_t pos = 0;
 
-       params.m_bsn = BytesToUint8(m_rxData, pos);
-       params.m_panDescriptor.m_coorAddrMode =
-          static_cast<lrwpan::AddressMode>(BytesToUint8(m_rxData, pos));
-       params.m_panDescriptor.m_coorPanId = BytesToUint16(m_rxData, pos);
-       if (params.m_panDescriptor.m_coorAddrMode == lrwpan::AddressMode::EXT_ADDR)
-       {
-           BytesToUint64(m_rxData, pos);
-       }
-       else
-       {
-           BytesToUint16(m_rxData, pos);
-       }
-       params.m_panDescriptor.m_logCh = BytesToUint8(m_rxData, pos);
-       params.m_panDescriptor.m_logChPage = BytesToUint8(m_rxData, pos);
-       params.m_panDescriptor.m_superframeSpec = BytesToUint16(m_rxData, pos);
-       params.m_panDescriptor.m_gtsPermit = BytesToUint8(m_rxData, pos);
-       params.m_panDescriptor.m_linkQuality = BytesToUint8(m_rxData, pos);
-       // TODO:params.m_panDescriptor.m_timeStamp // not supported
-       BytesToUint32(m_rxData, pos);
-       // TODO: Add pan descriptor security parameters here when supported
+        params.m_bsn = BytesToUint8(m_rxData, pos);
+        params.m_panDescriptor.m_coorAddrMode =
+            static_cast<lrwpan::AddressMode>(BytesToUint8(m_rxData, pos));
+        params.m_panDescriptor.m_coorPanId = BytesToUint16(m_rxData, pos);
+        if (params.m_panDescriptor.m_coorAddrMode == lrwpan::AddressMode::EXT_ADDR)
+        {
+            BytesToUint64(m_rxData, pos);
+        }
+        else
+        {
+            BytesToUint16(m_rxData, pos);
+        }
+        params.m_panDescriptor.m_logCh = BytesToUint8(m_rxData, pos);
+        params.m_panDescriptor.m_logChPage = BytesToUint8(m_rxData, pos);
+        params.m_panDescriptor.m_superframeSpec = BytesToUint16(m_rxData, pos);
+        params.m_panDescriptor.m_gtsPermit = BytesToUint8(m_rxData, pos);
+        params.m_panDescriptor.m_linkQuality = BytesToUint8(m_rxData, pos);
+        // TODO:params.m_panDescriptor.m_timeStamp // not supported
+        BytesToUint32(m_rxData, pos);
+        // TODO: Add pan descriptor security parameters here when supported
 
-       // TODO: Pending address specification field and pending address list missing,
-       //       add to beacon notify params when available
-       uint8_t pendingAddrSpecField = BytesToUint8(m_rxData, pos);
-       uint8_t numPendingShortAddr = pendingAddrSpecField & (0x07); // bits 0-2
-	   uint8_t numPendingExtAddr =  (pendingAddrSpecField & 0x70) >> 4; // bits 4-6;
-       for (uint8_t i = 0; i < numPendingShortAddr; i++)
-       {
-           BytesToUint16(m_rxData, pos);
-       }
+        // TODO: Pending address specification field and pending address list missing,
+        //       add to beacon notify params when available
+        uint8_t pendingAddrSpecField = BytesToUint8(m_rxData, pos);
+        uint8_t numPendingShortAddr = pendingAddrSpecField & (0x07);    // bits 0-2
+        uint8_t numPendingExtAddr = (pendingAddrSpecField & 0x70) >> 4; // bits 4-6;
+        for (uint8_t i = 0; i < numPendingShortAddr; i++)
+        {
+            BytesToUint16(m_rxData, pos);
+        }
 
-       for (uint8_t i = 0; i < numPendingExtAddr; i++)
-       {
-           BytesToUint64(m_rxData, pos);
-       }
+        for (uint8_t i = 0; i < numPendingExtAddr; i++)
+        {
+            BytesToUint64(m_rxData, pos);
+        }
 
-       params.m_sduLength = BytesToUint8(m_rxData, pos);
-       std::vector<uint8_t> sdu;
-       for (uint8_t z = 0; z < params.m_sduLength; z++)
-       {
-           sdu.emplace_back(BytesToUint8(m_rxData, pos));
-       }
-       params.m_sdu = Create<Packet>(sdu.data(), sdu.size());
+        params.m_sduLength = BytesToUint8(m_rxData, pos);
+        std::vector<uint8_t> sdu;
+        for (uint8_t z = 0; z < params.m_sduLength; z++)
+        {
+            sdu.emplace_back(BytesToUint8(m_rxData, pos));
+        }
+        params.m_sdu = Create<Packet>(sdu.data(), sdu.size());
 
-       m_mlmeBeaconNotifyIndicationCallback(params);
-   }
+        m_mlmeBeaconNotifyIndicationCallback(params);
+    }
 }
 
 void

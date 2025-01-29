@@ -11,9 +11,9 @@
 #define UART_LRWPAN_MAC_H
 
 #include <ns3/lr-wpan-mac-base.h>
+#include <ns3/simulator.h>
 #include <ns3/traced-callback.h>
 #include <ns3/traced-value.h>
-#include <ns3/simulator.h>
 
 #include <iostream>
 #include <thread>
