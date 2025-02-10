@@ -40,13 +40,13 @@
  * 6) Scanning of the remaining channels 13 and 14 is cancelled.
  */
 
+#include "ns3/core-module.h"
+#include "ns3/log.h"
+#include "ns3/lr-wpan-fields.h"
 #include "ns3/network-module.h"
-#include <ns3/core-module.h>
-#include <ns3/log.h>
-#include <ns3/lr-wpan-fields.h>
-#include <ns3/packet.h>
-#include <ns3/simulator.h>
-#include <ns3/uart-net-device.h>
+#include "ns3/packet.h"
+#include "ns3/simulator.h"
+#include "ns3/uart-net-device.h"
 
 #include <iostream>
 

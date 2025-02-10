@@ -9,7 +9,7 @@
 
 #include "uart-lr-wpan-mac.h"
 
-#include <ns3/log.h>
+#include "ns3/log.h"
 
 #include <boost/asio.hpp>
 #include <map>

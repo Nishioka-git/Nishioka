@@ -7,13 +7,13 @@
  *  Alberto Gallegos Ramonet <alramonet@is.tokushima-u.ac.jp>
  */
 
+#include "ns3/core-module.h"
+#include "ns3/log.h"
+#include "ns3/lr-wpan-module.h"
 #include "ns3/network-module.h"
-#include <ns3/core-module.h>
-#include <ns3/log.h>
-#include <ns3/lr-wpan-module.h>
-#include <ns3/packet.h>
-#include <ns3/simulator.h>
-#include <ns3/uart-net-device.h>
+#include "ns3/packet.h"
+#include "ns3/simulator.h"
+#include "ns3/uart-net-device.h"
 
 #include <iostream>
 

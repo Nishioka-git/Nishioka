@@ -19,11 +19,12 @@ build_lib_example(
 build_lib_example(
   NAME uart-sixlowpan-ping
   SOURCE_FILES uart-sixlowpan-ping.cc
-  LIBRARIES_TO_LINK ${libnetwork}
-                    ${libsixlowpan}
-                    ${libinternet}
-                    ${liblr-wpan}
-                    ${libinternet-apps}
+  LIBRARIES_TO_LINK
+    ${libnetwork}
+    ${libsixlowpan}
+    ${libinternet}
+    ${liblr-wpan}
+    ${libinternet-apps}
 )
 
 build_lib_example(

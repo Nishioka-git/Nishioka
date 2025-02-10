@@ -7,16 +7,16 @@
  *  Alberto Gallegos Ramonet <alramonet@is.tokushima-u.ac.jp>
  */
 
+#include "ns3/core-module.h"
 #include "ns3/internet-apps-module.h"
 #include "ns3/internet-module.h"
-#include <ns3/core-module.h>
 // #include "ns3/lr-wpan-module.h"
 // #include "ns3/mobility-module.h"
 // #include "ns3/propagation-module.h"
 #include "ns3/sixlowpan-module.h"
 // #include "ns3/spectrum-module.h"
-#include <ns3/lr-wpan-fields.h>
-#include <ns3/uart-net-device.h>
+#include "ns3/lr-wpan-fields.h"
+#include "ns3/uart-net-device.h"
 
 #include <fstream>
 
