@@ -1,9 +1,21 @@
 check_include_files(
   "boost/asio.hpp"
-  ASIO_FILES
+  HAVE_BOOST_ASIO
   LANGUAGE
   CXX
 )
+
+if(${HAVE_BOOST_ASIO})
+  add_definitions(-DHAVE_BOOST_ASIO)
+  message(STATUS "Boost Asynchronous IO (ASIO) have been found.")
+else()
+  message(
+    STATUS
+      "Boost asio are required for UART operations"
+      " Ubuntu ships it within the libboost-dev package."
+      " You may need to clean up the CMake cache after installing it to pass this check."
+  )
+endif()
 
 build_lib(
   LIBNAME uart-net-device
