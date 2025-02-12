@@ -25,12 +25,12 @@ namespace uartnetdevice
 {
 
 /**
- *  The IO service used to provide asynchronous serial communication. This service is used by
+ *  The IO context used to provide asynchronous serial communication. This context is used by
  *  the serial port instances.
  *  This is declared as a static variable in here to avoid "cppyyy undefined symbols" errors in
  *  the python bindings when using external libraries such as the present boost library.
  */
-static boost::asio::io_service g_ioService;
+static boost::asio::io_context g_ioContext;
 
 /**
  *  Map containing the serial port instances necessary to realize serial communication
@@ -58,7 +58,7 @@ UartLrWpanMac::UartLrWpanMac()
     // Use the size of the map to assign instances IDs
     m_currentInstanceId = g_serialPortInstances.size();
     g_serialPortInstances.insert(
-        {g_serialPortInstances.size(), boost::asio::serial_port(g_ioService)});
+        {g_serialPortInstances.size(), boost::asio::serial_port(g_ioContext)});
 }
 
 UartLrWpanMac::UartLrWpanMac(const std::string& port)
@@ -68,7 +68,7 @@ UartLrWpanMac::UartLrWpanMac(const std::string& port)
 
     m_currentInstanceId = g_serialPortInstances.size();
     g_serialPortInstances.insert(
-        {g_serialPortInstances.size(), boost::asio::serial_port(g_ioService)});
+        {g_serialPortInstances.size(), boost::asio::serial_port(g_ioContext)});
 
     m_rxState = RX_START;
     m_rxPrimitiveType = NONE_CFM;
@@ -77,7 +77,7 @@ UartLrWpanMac::UartLrWpanMac(const std::string& port)
 
     OpenPort();
     ReadByte();
-    m_ioServiceThread = std::thread([this] { RunIoService(); });
+    m_ioContextThread = std::thread([this] { RunIoContext(); });
 }
 
 void
@@ -97,12 +97,12 @@ UartLrWpanMac::DoDispose()
     NS_LOG_FUNCTION(this);
 
     g_serialPortInstances.at(m_currentInstanceId).close();
-    if (!g_ioService.stopped())
+    if (!g_ioContext.stopped())
     {
-        g_ioService.stop();
+        g_ioContext.stop();
     }
 
-    m_ioServiceThread.join();
+    m_ioContextThread.join();
 
     m_mcpsDataConfirmCallback = MakeNullCallback<void, McpsDataConfirmParams>();
     m_mcpsDataIndicationCallback = MakeNullCallback<void, McpsDataIndicationParams, Ptr<Packet>>();
@@ -1036,7 +1036,8 @@ UartLrWpanMac::BeaconNotifyIndication()
 
         params.m_sduLength = BytesToUint8(m_rxData, pos);
         std::vector<uint8_t> sdu;
-        for (uint8_t z = 0; z < params.m_sduLength; z++)
+        sdu.resize(params.m_sduLength);
+        for (uint32_t z = 0; z < params.m_sduLength; z++)
         {
             sdu.emplace_back(BytesToUint8(m_rxData, pos));
         }
@@ -1047,9 +1048,9 @@ UartLrWpanMac::BeaconNotifyIndication()
 }
 
 void
-UartLrWpanMac::RunIoService()
+UartLrWpanMac::RunIoContext()
 {
-    g_ioService.run();
+    g_ioContext.run();
 }
 
 } // namespace uartnetdevice

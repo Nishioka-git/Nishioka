@@ -188,10 +188,10 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
     void ReadByte();
 
     /**
-     * Used to initiate the IO service necessary for the asynchronous operations in the configured
+     * Used to initiate the IO context necessary for the asynchronous operations in the configured
      * NXP JN516x device.
      */
-    void RunIoService();
+    void RunIoContext();
 
     /**
      * Function used to interpreted the accumulated received bytes and process the received data
@@ -273,9 +273,9 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
     std::string m_port;
 
     /**
-     * The thread used to run the asynchronous serial communication IO service.
+     * The thread used to run the asynchronous serial communication IO context.
      */
-    std::thread m_ioServiceThread;
+    std::thread m_ioContextThread;
 
     /**
      * The object used to handle the mutually exclusive zones.
