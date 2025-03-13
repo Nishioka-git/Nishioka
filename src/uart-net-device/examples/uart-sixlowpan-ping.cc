@@ -16,13 +16,13 @@
 #include "ns3/sixlowpan-module.h"
 // #include "ns3/spectrum-module.h"
 #include "ns3/lr-wpan-fields.h"
-#include "ns3/uart-net-device.h"
+#include "ns3/uart-lr-wpan-net-device.h"
 
 #include <fstream>
 
 using namespace ns3;
 using namespace ns3::lrwpan;
-using namespace ns3::uartnetdevice;
+using namespace ns3::uart;
 
 int
 main(int argc, char** argv)
@@ -55,11 +55,11 @@ main(int argc, char** argv)
 
     // Create 1 PAN coordinator node, and 1 end device
     Ptr<Node> coord1 = CreateObject<Node>();
-    Ptr<UartNetDevice> coord1NetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB0");
+    Ptr<UartLrWpanNetDevice> coord1NetDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB0");
     coord1->AddDevice(coord1NetDevice);
 
     Ptr<Node> endNode = CreateObject<Node>();
-    Ptr<UartNetDevice> endNodeNetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB1");
+    Ptr<UartLrWpanNetDevice> endNodeNetDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB1");
     endNode->AddDevice(endNodeNetDevice);
 
     NodeContainer nodes;

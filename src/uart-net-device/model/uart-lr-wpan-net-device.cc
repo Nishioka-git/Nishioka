@@ -7,7 +7,7 @@
  *  Alberto Gallegos Ramonet <alramonet@is.tokushima-u.ac.jp>
  */
 
-#include "uart-net-device.h"
+#include "uart-lr-wpan-net-device.h"
 
 #include "ns3/abort.h"
 #include "ns3/boolean.h"
@@ -21,39 +21,39 @@ using namespace ns3::lrwpan;
 
 namespace ns3
 {
-namespace uartnetdevice
+namespace uart
 {
 
-NS_LOG_COMPONENT_DEFINE("UartNetDevice");
-NS_OBJECT_ENSURE_REGISTERED(UartNetDevice);
+NS_LOG_COMPONENT_DEFINE("UartLrWpanNetDevice");
+NS_OBJECT_ENSURE_REGISTERED(UartLrWpanNetDevice);
 
 TypeId
-UartNetDevice::GetTypeId()
+UartLrWpanNetDevice::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::UartNetDevice")
+    static TypeId tid = TypeId("ns3::UartLrWpanNetDevice")
                             .SetParent<NetDevice>()
-                            .SetGroupName("UartNetDevice")
-                            .AddConstructor<UartNetDevice>();
+                            .SetGroupName("UartLrWpanNetDevice")
+                            .AddConstructor<UartLrWpanNetDevice>();
     return tid;
 }
 
-UartNetDevice::UartNetDevice()
+UartLrWpanNetDevice::UartLrWpanNetDevice()
 {
 }
 
-UartNetDevice::UartNetDevice(std::string port)
+UartLrWpanNetDevice::UartLrWpanNetDevice(std::string port)
 {
     NS_LOG_FUNCTION(this);
     m_mac = CreateObject<UartLrWpanMac>(port);
 }
 
-UartNetDevice::~UartNetDevice()
+UartLrWpanNetDevice::~UartLrWpanNetDevice()
 {
     NS_LOG_FUNCTION(this);
 }
 
 void
-UartNetDevice::DoDispose()
+UartLrWpanNetDevice::DoDispose()
 {
     NS_LOG_FUNCTION(this);
     m_mac = nullptr;
@@ -63,70 +63,69 @@ UartNetDevice::DoDispose()
 }
 
 void
-UartNetDevice::DoInitialize()
+UartLrWpanNetDevice::DoInitialize()
 {
     NS_LOG_FUNCTION(this);
-    // m_mac->Initialize();
     AggregateObject(m_mac);
     NetDevice::DoInitialize();
 }
 
 void
-UartNetDevice::SetMac(Ptr<UartLrWpanMac> mac)
+UartLrWpanNetDevice::SetMac(Ptr<UartLrWpanMac> mac)
 {
     m_mac = mac;
 }
 
 Ptr<UartLrWpanMac>
-UartNetDevice::GetMac() const
+UartLrWpanNetDevice::GetMac() const
 {
     return m_mac;
 }
 
 void
-UartNetDevice::SetPanAssociation(uint16_t panId,
+UartLrWpanNetDevice::SetPanAssociation(uint16_t panId,
                                  Mac16Address coordShortAddr,
                                  Mac16Address assignedShortAddr)
 {
 }
 
 void
-UartNetDevice::SetIfIndex(const uint32_t index)
+UartLrWpanNetDevice::SetIfIndex(const uint32_t index)
 {
     NS_LOG_FUNCTION(this << index);
     m_ifIndex = index;
 }
 
 uint32_t
-UartNetDevice::GetIfIndex() const
+UartLrWpanNetDevice::GetIfIndex() const
 {
     NS_LOG_FUNCTION(this);
     return m_ifIndex;
 }
 
 Ptr<Channel>
-UartNetDevice::GetChannel() const
+UartLrWpanNetDevice::GetChannel() const
 {
     NS_ABORT_MSG("Unsupported");
     return nullptr;
 }
 
 void
-UartNetDevice::LinkUp()
+UartLrWpanNetDevice::LinkUp()
 {
     NS_LOG_FUNCTION(this);
     m_linkUp = true;
 }
 
 void
-UartNetDevice::LinkDown()
+UartLrWpanNetDevice::LinkDown()
 {
     NS_LOG_FUNCTION(this);
     m_linkUp = false;
 }
 
 void
-UartNetDevice::MlmeSetConfirm(MlmeSetConfirmParams params)
+UartLrWpanNetDevice::MlmeSetConfirm(MlmeSetConfirmParams params)
 {
     /*if (params.m_status == MacStatus::SUCCESS)
     {
@@ -139,7 +138,7 @@ UartNetDevice::MlmeSetConfirm(MlmeSetConfirmParams params)
 }
 
 void
-UartNetDevice::SetAddress(Address address)
+UartLrWpanNetDevice::SetAddress(Address address)
 {
     NS_LOG_FUNCTION(this);
     if (Mac16Address::IsMatchingType(address))
@@ -148,26 +147,26 @@ UartNetDevice::SetAddress(Address address)
     }
     else
     {
-        NS_ABORT_MSG("UartNetDevice::SetAddress - address is not of a compatible type");
+        NS_ABORT_MSG("UartLrWpanNetDevice::SetAddress - address is not of a compatible type");
     }
 }
 
 Address
-UartNetDevice::GetAddress() const
+UartLrWpanNetDevice::GetAddress() const
 {
     NS_ABORT_MSG("Unsupported");
     return Mac16Address::GetBroadcast();
 }
 
 bool
-UartNetDevice::SetMtu(const uint16_t mtu)
+UartLrWpanNetDevice::SetMtu(const uint16_t mtu)
 {
     NS_ABORT_MSG("Unsupported");
     return false;
 }
 
 uint16_t
-UartNetDevice::GetMtu() const
+UartLrWpanNetDevice::GetMtu() const
 {
     NS_LOG_FUNCTION(this);
     // Maximum payload size is: max psdu - frame control - seqno - addressing - security - fcs
@@ -178,76 +177,76 @@ UartNetDevice::GetMtu() const
 }
 
 bool
-UartNetDevice::IsLinkUp() const
+UartLrWpanNetDevice::IsLinkUp() const
 {
     NS_ABORT_MSG("Unsupported");
     return false;
 }
 
 void
-UartNetDevice::AddLinkChangeCallback(Callback<void> callback)
+UartLrWpanNetDevice::AddLinkChangeCallback(Callback<void> callback)
 {
     NS_LOG_FUNCTION(this);
     m_linkChanges.ConnectWithoutContext(callback);
 }
 
 bool
-UartNetDevice::IsBroadcast() const
+UartLrWpanNetDevice::IsBroadcast() const
 {
     NS_LOG_FUNCTION(this);
     return true;
 }
 
 Address
-UartNetDevice::GetBroadcast() const
+UartLrWpanNetDevice::GetBroadcast() const
 {
     NS_LOG_FUNCTION(this);
     return Mac16Address::GetBroadcast();
 }
 
 bool
-UartNetDevice::IsMulticast() const
+UartLrWpanNetDevice::IsMulticast() const
 {
     NS_ABORT_MSG("Unsupported");
     return false;
 }
 
 Address
-UartNetDevice::GetMulticast(Ipv4Address multicastGroup) const
+UartLrWpanNetDevice::GetMulticast(Ipv4Address multicastGroup) const
 {
     NS_ABORT_MSG("Unsupported");
     return Address();
 }
 
 Address
-UartNetDevice::GetMulticast(Ipv6Address addr) const
+UartLrWpanNetDevice::GetMulticast(Ipv6Address addr) const
 {
     NS_ABORT_MSG("Unsupported");
     return Mac16Address::GetBroadcast();
 }
 
 bool
-UartNetDevice::IsBridge() const
+UartLrWpanNetDevice::IsBridge() const
 {
     NS_ABORT_MSG("Unsupported");
     return false;
 }
 
 bool
-UartNetDevice::IsPointToPoint() const
+UartLrWpanNetDevice::IsPointToPoint() const
 {
     NS_ABORT_MSG("Unsupported");
     return false;
 }
 
 bool
-UartNetDevice::Send(Ptr<Packet> packet, const Address& dest, uint16_t protocolNumber)
+UartLrWpanNetDevice::Send(Ptr<Packet> packet, const Address& dest, uint16_t protocolNumber)
 {
     return true;
 }
 
 bool
-UartNetDevice::SendFrom(Ptr<Packet> packet,
+UartLrWpanNetDevice::SendFrom(Ptr<Packet> packet,
                         const Address& source,
                         const Address& dest,
                         uint16_t protocolNumber)
@@ -259,35 +258,35 @@ UartNetDevice::SendFrom(Ptr<Packet> packet,
 }
 
 Ptr<Node>
-UartNetDevice::GetNode() const
+UartLrWpanNetDevice::GetNode() const
 {
     NS_LOG_FUNCTION(this);
     return m_node;
 }
 
 void
-UartNetDevice::SetNode(Ptr<Node> node)
+UartLrWpanNetDevice::SetNode(Ptr<Node> node)
 {
     NS_LOG_FUNCTION(this);
     m_node = node;
 }
 
 bool
-UartNetDevice::NeedsArp() const
+UartLrWpanNetDevice::NeedsArp() const
 {
     NS_LOG_FUNCTION(this);
     return false;
 }
 
 void
-UartNetDevice::SetReceiveCallback(ReceiveCallback cb)
+UartLrWpanNetDevice::SetReceiveCallback(ReceiveCallback cb)
 {
     NS_LOG_FUNCTION(this);
     m_receiveCallback = cb;
 }
 
 void
-UartNetDevice::SetPromiscReceiveCallback(PromiscReceiveCallback cb)
+UartLrWpanNetDevice::SetPromiscReceiveCallback(PromiscReceiveCallback cb)
 {
     // This method basically assumes an 802.3-compliant device, but a raw
     // 802.15.4 device does not have an ethertype, and requires specific
@@ -298,11 +297,11 @@ UartNetDevice::SetPromiscReceiveCallback(PromiscReceiveCallback cb)
 }
 
 bool
-UartNetDevice::SupportsSendFrom() const
+UartLrWpanNetDevice::SupportsSendFrom() const
 {
     NS_LOG_FUNCTION_NOARGS();
     return false;
 }
 
-} // namespace uartnetdevice
+} // namespace UartLrWpanNetDevice
 } // namespace ns3

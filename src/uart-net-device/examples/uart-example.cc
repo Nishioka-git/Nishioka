@@ -13,16 +13,16 @@
 #include "ns3/network-module.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
-#include "ns3/uart-net-device.h"
+#include "ns3/uart-lr-wpan-net-device.h"
 
 #include <iostream>
 
 using namespace ns3;
 using namespace ns3::lrwpan;
-using namespace ns3::uartnetdevice;
+using namespace ns3::uart;
 
 static void
-ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
+ScanConfirm(Ptr<UartLrWpanNetDevice> device, MlmeScanConfirmParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Scan confirm status: " << static_cast<uint32_t>(params.m_status)
@@ -81,7 +81,7 @@ ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
 }
 
 static void
-AssociateIndication(Ptr<UartNetDevice> device, MlmeAssociateIndicationParams params)
+AssociateIndication(Ptr<UartLrWpanNetDevice> device, MlmeAssociateIndicationParams params)
 {
     std::cout
         << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
@@ -112,14 +112,14 @@ AssociateIndication(Ptr<UartNetDevice> device, MlmeAssociateIndicationParams par
 }
 
 static void
-CommStatusIndication(Ptr<UartNetDevice> device, MlmeCommStatusIndicationParams params)
+CommStatusIndication(Ptr<UartLrWpanNetDevice> device, MlmeCommStatusIndicationParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Coordinator received COMM-STATUS.indication\n";
 }
 
 static void
-AssociateConfirm(Ptr<UartNetDevice> device, MlmeAssociateConfirmParams params)
+AssociateConfirm(Ptr<UartLrWpanNetDevice> device, MlmeAssociateConfirmParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Associate Confirm: Status " << static_cast<uint32_t>(params.m_status)
@@ -127,14 +127,14 @@ AssociateConfirm(Ptr<UartNetDevice> device, MlmeAssociateConfirmParams params)
 }
 
 static void
-StartConfirm(Ptr<UartNetDevice> device, MlmeStartConfirmParams params)
+StartConfirm(Ptr<UartLrWpanNetDevice> device, MlmeStartConfirmParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Start confirm | Status :" << static_cast<uint32_t>(params.m_status) << "\n";
 }
 
 static void
-DataConfirm(Ptr<UartNetDevice> device, McpsDataConfirmParams params)
+DataConfirm(Ptr<UartLrWpanNetDevice> device, McpsDataConfirmParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Data confirm | Status :" << static_cast<uint32_t>(params.m_status)
@@ -142,7 +142,7 @@ DataConfirm(Ptr<UartNetDevice> device, McpsDataConfirmParams params)
 }
 
 static void
-DataIndication(Ptr<UartNetDevice> device, McpsDataIndicationParams params, Ptr<Packet> p)
+DataIndication(Ptr<UartLrWpanNetDevice> device, McpsDataIndicationParams params, Ptr<Packet> p)
 {
     std::vector<uint8_t> buffer;
     buffer.resize(p->GetSize());
@@ -164,7 +164,7 @@ DataIndication(Ptr<UartNetDevice> device, McpsDataIndicationParams params, Ptr<P
 }
 
 static void
-SetConfirm(Ptr<UartNetDevice> device, MlmeSetConfirmParams params)
+SetConfirm(Ptr<UartLrWpanNetDevice> device, MlmeSetConfirmParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", In SET Confirm with id attribute 0x" << std::hex << params.id << std::dec
@@ -173,7 +173,7 @@ SetConfirm(Ptr<UartNetDevice> device, MlmeSetConfirmParams params)
 }
 
 static void
-GetConfirm(Ptr<UartNetDevice> device,
+GetConfirm(Ptr<UartLrWpanNetDevice> device,
            MacStatus status,
            MacPibAttributeIdentifier id,
            Ptr<MacPibAttributes> pibattr)
@@ -242,12 +242,12 @@ main(int argc, char* argv[])
 
     // Coordinator
     Ptr<Node> node = CreateObject<Node>();
-    Ptr<UartNetDevice> uartNetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB0");
+    Ptr<UartLrWpanNetDevice> uartNetDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB0");
     node->AddDevice(uartNetDevice);
 
     // End Device
     Ptr<Node> node2 = CreateObject<Node>();
-    Ptr<UartNetDevice> uartNetDevice2 = CreateObject<UartNetDevice>("/dev/ttyUSB1");
+    Ptr<UartLrWpanNetDevice> uartNetDevice2 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB1");
     node2->AddDevice(uartNetDevice2);
 
     // Coordinator Confirm and Indication primitives callback hooks
@@ -351,7 +351,7 @@ main(int argc, char* argv[])
 
     // Test MLME-SET.request (beacon Payload Length and beacon Payload)
     //      MLME-GET.request
-    std::string stringMsg = "My beacon Payload\0";
+    std::string stringMsg = "My beacon Payload in ns-3\0";
     std::vector<uint8_t> beaconMsg(stringMsg.begin(), stringMsg.end());
 
     Ptr<MacPibAttributes> pibAttr2 = Create<MacPibAttributes>();
@@ -418,7 +418,7 @@ main(int argc, char* argv[])
     dataParams.m_srcAddrMode = SHORT_ADDR;
 
     std::ostringstream msg;
-    msg << "Hello World" << '\0';
+    msg << "Hello World ns-3" << '\0';
     Ptr<Packet> packet = Create<Packet>((uint8_t*)msg.str().c_str(), msg.str().length());
 
     Simulator::ScheduleWithContext(uartNetDevice2->GetNode()->GetId(),

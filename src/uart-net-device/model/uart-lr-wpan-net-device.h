@@ -6,8 +6,8 @@
  * Author:
  *    Alberto Gallegos Ramonet <alramonet@is.tokushima-u.ac.jp>
  */
-#ifndef UART_NET_DEVICE_H
-#define UART_NET_DEVICE_H
+#ifndef UART_LR_WPAN_NET_DEVICE_H
+#define UART_LR_WPAN_NET_DEVICE_H
 
 #include "uart-lr-wpan-mac.h"
 
@@ -19,7 +19,7 @@ namespace ns3
 
 class Node;
 
-namespace uartnetdevice
+namespace uart
 {
 
 /**
@@ -30,7 +30,7 @@ namespace uartnetdevice
  * (companion application installed in the MCU) in order to achieve this co-processor service.
  *
  */
-class UartNetDevice : public NetDevice
+class UartLrWpanNetDevice : public NetDevice
 {
   public:
     /**
@@ -40,7 +40,7 @@ class UartNetDevice : public NetDevice
      */
     static TypeId GetTypeId();
 
-    UartNetDevice();
+    UartLrWpanNetDevice();
 
     /**
      * The Uart NetDevice constructor with port device parameter used to establish a serial
@@ -49,8 +49,8 @@ class UartNetDevice : public NetDevice
      * @param port The physical port identifier of the device to which this class instance will
      * connect.
      */
-    UartNetDevice(std::string port);
-    ~UartNetDevice() override;
+    UartLrWpanNetDevice(std::string port);
+    ~UartLrWpanNetDevice() override;
 
     /**
      * Set the MAC to be used by this NetDevice.
@@ -174,7 +174,7 @@ class UartNetDevice : public NetDevice
     ReceiveCallback m_receiveCallback;
 };
 
-} // namespace uartnetdevice
+} // namespace UartLrWpanNetDevice
 } // namespace ns3
 
-#endif /* UART_NET_DEVICE_H */
+#endif /* UART_LR_WPAN_NET_DEVICE_H */

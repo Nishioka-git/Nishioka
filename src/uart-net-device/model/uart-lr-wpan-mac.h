@@ -24,7 +24,7 @@ namespace ns3
 
 class Packet;
 
-namespace uartnetdevice
+namespace uart
 {
 
 enum ReadState

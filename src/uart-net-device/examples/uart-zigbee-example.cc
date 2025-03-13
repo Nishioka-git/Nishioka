@@ -40,7 +40,7 @@
 #include "ns3/propagation-loss-model.h"
 #include "ns3/simulator.h"
 #include "ns3/single-model-spectrum-channel.h"
-#include "ns3/uart-net-device.h"
+#include "ns3/uart-lr-wpan-net-device.h"
 #include "ns3/zigbee-module.h"
 
 #include <iostream>
@@ -48,7 +48,7 @@
 using namespace ns3;
 using namespace ns3::lrwpan;
 using namespace ns3::zigbee;
-using namespace ns3::uartnetdevice;
+using namespace ns3::uart;
 
 NS_LOG_COMPONENT_DEFINE("ZigbeeAssociationJoin");
 
@@ -136,7 +136,7 @@ main(int argc, char* argv[])
     // LogComponentEnable("ZigbeeStack", LOG_LEVEL_DEBUG);
 
     // LogComponentEnable("UartLrWpanMac", LOG_LEVEL_DEBUG);
-    // LogComponentEnable("UartNetDevice", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("UartLrWpanNetDevice", LOG_LEVEL_DEBUG);
 
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
@@ -145,12 +145,12 @@ main(int argc, char* argv[])
 
     // Coordinator
     Ptr<Node> node = CreateObject<Node>();
-    Ptr<UartNetDevice> uartNetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB0");
+    Ptr<UartLrWpanNetDevice> uartNetDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB0");
     node->AddDevice(uartNetDevice);
 
     // End Device
     Ptr<Node> node2 = CreateObject<Node>();
-    Ptr<UartNetDevice> uartNetDevice2 = CreateObject<UartNetDevice>("/dev/ttyUSB1");
+    Ptr<UartLrWpanNetDevice> uartNetDevice2 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB1");
     node2->AddDevice(uartNetDevice2);
 
     // Configure NWK

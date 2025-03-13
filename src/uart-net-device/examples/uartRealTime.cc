@@ -13,13 +13,13 @@
 #include "ns3/network-module.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
-#include "ns3/uart-net-device.h"
+#include "ns3/uart-lr-wpan-net-device.h"
 
 #include <iostream>
 
 using namespace ns3;
 using namespace ns3::lrwpan;
-using namespace ns3::uartnetdevice;
+using namespace ns3::uart;
 
 /*static void
 ScanConfirm(Ptr<LrWpanNetDevice> device, MlmeScanConfirmParams params)
@@ -38,7 +38,7 @@ ScanConfirm(Ptr<LrWpanNetDevice> device, MlmeScanConfirmParams params)
 }
 */
 static void
-ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
+ScanConfirm(Ptr<UartLrWpanNetDevice> device, MlmeScanConfirmParams params)
 {
     std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
               << ", Scan confirm status: " << static_cast<uint32_t>(params.m_status)
@@ -60,7 +60,7 @@ main(int argc, char* argv[])
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
 
     Ptr<Node> node = CreateObject<Node>();
-    Ptr<UartNetDevice> uartNetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB0");
+    Ptr<UartLrWpanNetDevice> uartNetDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB0");
     node->AddDevice(uartNetDevice);
 
     // Device Confirm primitives callback hooks

@@ -21,7 +21,7 @@ using namespace ns3::lrwpan;
 
 namespace ns3
 {
-namespace uartnetdevice
+namespace uart
 {
 
 /**

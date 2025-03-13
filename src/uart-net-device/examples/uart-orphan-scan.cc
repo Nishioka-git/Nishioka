@@ -46,16 +46,16 @@
 #include "ns3/network-module.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
-#include "ns3/uart-net-device.h"
+#include "ns3/uart-lr-wpan-net-device.h"
 
 #include <iostream>
 
 using namespace ns3;
 using namespace ns3::lrwpan;
-using namespace ns3::uartnetdevice;
+using namespace ns3::uart;
 
 static void
-ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
+ScanConfirm(Ptr<UartLrWpanNetDevice> device, MlmeScanConfirmParams params)
 {
     if (params.m_status == MacStatus::SUCCESS)
     {
@@ -79,7 +79,7 @@ ScanConfirm(Ptr<UartNetDevice> device, MlmeScanConfirmParams params)
 }
 
 static void
-OrphanIndication(Ptr<UartNetDevice> device, MlmeOrphanIndicationParams params)
+OrphanIndication(Ptr<UartLrWpanNetDevice> device, MlmeOrphanIndicationParams params)
 {
     // The steps taken by the coordinator on the event of an orphan indication
     // are meant to be implemented by the next higher layer and are out of the scope of the
@@ -107,11 +107,11 @@ main(int argc, char* argv[])
 
     // Create 1 PAN coordinator node, and 1 end device
     Ptr<Node> coord1 = CreateObject<Node>();
-    Ptr<UartNetDevice> coord1NetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB0");
+    Ptr<UartLrWpanNetDevice> coord1NetDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB0");
     coord1->AddDevice(coord1NetDevice);
 
     Ptr<Node> endNode = CreateObject<Node>();
-    Ptr<UartNetDevice> endNodeNetDevice = CreateObject<UartNetDevice>("/dev/ttyUSB1");
+    Ptr<UartLrWpanNetDevice> endNodeNetDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB1");
     endNode->AddDevice(endNodeNetDevice);
 
     // MAC layer Callbacks hooks
