@@ -33,3 +33,9 @@ build_lib_example(
   LIBRARIES_TO_LINK ${liblr-wpan}
                     ${libzigbee}
 )
+
+build_lib_example(
+  NAME uart-assoc-exp
+  SOURCE_FILES uart-assoc-exp.cc
+  LIBRARIES_TO_LINK ${liblr-wpan}
+)
