@@ -11,13 +11,11 @@
 #include "ns3/log.h"
 #include "ns3/lr-wpan-fields.h"
 #include "ns3/network-module.h"
-#include "ns3/uart-lr-wpan-helper.h"
 #include "ns3/packet.h"
-#include "ns3/simulator.h"
-#include "ns3/uart-lr-wpan-net-device.h"
 #include "ns3/random-variable-stream.h"
-#include "ns3/log.h"
-
+#include "ns3/simulator.h"
+#include "ns3/uart-lr-wpan-helper.h"
+#include "ns3/uart-lr-wpan-net-device.h"
 
 #include <iostream>
 
@@ -87,10 +85,9 @@ ScanConfirm(Ptr<UartLrWpanNetDevice> device, MlmeScanConfirmParams params)
 static void
 AssociateIndication(Ptr<UartLrWpanNetDevice> device, MlmeAssociateIndicationParams params)
 {
-    std::cout
-        << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
-        << ", AssociateIndication: Coord Received Assoc. Req. from "
-        << params.m_extDevAddr << "\n";
+    std::cout << Simulator::Now().As(Time::S) << " Node " << device->GetNode()->GetId()
+              << ", AssociateIndication: Coord Received Assoc. Req. from " << params.m_extDevAddr
+              << "\n";
 
     MlmeAssociateResponseParams respParams;
 
@@ -235,17 +232,17 @@ GetConfirm(Ptr<UartLrWpanNetDevice> device,
 int
 main(int argc, char* argv[])
 {
-    uint8_t numNodes = 9;
+    uint8_t numNodes = 2;
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("numNodes", "Number of nodes (minimum 2)", numNodes);
+    cmd.Parse(argc, argv);
 
     LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC));
     LogComponentEnable("UartLrWpanHelper", LOG_LEVEL_DEBUG);
 
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
-
 
     NS_ASSERT_MSG(numNodes >= 2, "A minimum of 2 nodes is required");
 
@@ -259,7 +256,7 @@ main(int argc, char* argv[])
     {
         Ptr<Node> node = *i;
         Ptr<NetDevice> netDevice = node->GetDevice(0);
-        Ptr<UartLrWpanNetDevice> uartNetDevice= DynamicCast<UartLrWpanNetDevice>(netDevice);
+        Ptr<UartLrWpanNetDevice> uartNetDevice = DynamicCast<UartLrWpanNetDevice>(netDevice);
 
         // Confirm and Indication primitives callback hooks used by
         // devices
@@ -289,13 +286,13 @@ main(int argc, char* argv[])
             Ptr<MacPibAttributes> pibAttr1 = Create<MacPibAttributes>();
             pibAttr1->macShortAddress = Mac16Address("00:00");
             Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
-                                            Seconds(0),
-                                            &UartLrWpanMac::MlmeSetRequest,
-                                            uartNetDevice->GetMac(),
-                                            MacPibAttributeIdentifier::macShortAddress,
-                                            pibAttr1);
+                                           Seconds(0),
+                                           &UartLrWpanMac::MlmeSetRequest,
+                                           uartNetDevice->GetMac(),
+                                           MacPibAttributeIdentifier::macShortAddress,
+                                           pibAttr1);
 
-             // MLME-START.request
+            // MLME-START.request
             MlmeStartRequestParams startParams;
             startParams.m_PanId = 0xCAFE;
             startParams.m_logCh = 11;
@@ -307,10 +304,10 @@ main(int argc, char* argv[])
             startParams.m_coorRealgn = false;
 
             Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
-                                            Seconds(1),
-                                            &UartLrWpanMac::MlmeStartRequest,
-                                            uartNetDevice->GetMac(),
-                                            startParams);
+                                           Seconds(1),
+                                           &UartLrWpanMac::MlmeStartRequest,
+                                           uartNetDevice->GetMac(),
+                                           startParams);
         }
         else
         {
@@ -323,10 +320,10 @@ main(int argc, char* argv[])
             associateParams.m_coordShortAddr = Mac16Address("00:00");
 
             Simulator::ScheduleWithContext(uartNetDevice->GetNode()->GetId(),
-                                Seconds(1 + node->GetId()),
-                                &UartLrWpanMac::MlmeAssociateRequest,
-                                uartNetDevice->GetMac(),
-                                associateParams);
+                                           Seconds(1 + node->GetId()),
+                                           &UartLrWpanMac::MlmeAssociateRequest,
+                                           uartNetDevice->GetMac(),
+                                           associateParams);
         }
 
         // Schedule devices data transmission after association have taken place
@@ -351,17 +348,10 @@ main(int argc, char* argv[])
                                            uartNetDevice->GetMac(),
                                            dataParams,
                                            packet);
-
         }
-
     }
 
-
-
-
-
-
-    Simulator::Stop(Seconds(60));
+    Simulator::Stop(Seconds(20));
     Simulator::Run();
     Simulator::Destroy();
     return 0;

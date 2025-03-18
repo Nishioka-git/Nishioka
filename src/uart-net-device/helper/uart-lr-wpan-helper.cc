@@ -27,7 +27,6 @@ UartLrWpanHelper::~UartLrWpanHelper()
 NetDeviceContainer
 UartLrWpanHelper::Install(NodeContainer c)
 {
-
     NetDeviceContainer devices;
     for (auto i = c.Begin(); i != c.End(); i++)
     {
@@ -36,13 +35,13 @@ UartLrWpanHelper::Install(NodeContainer c)
         std::string port = "/dev/ttyUSB" + std::to_string(index);
 
         Ptr<uart::UartLrWpanNetDevice> uartNetDevice =
-           CreateObject<uart::UartLrWpanNetDevice>(port);
+            CreateObject<uart::UartLrWpanNetDevice>(port);
 
-        NS_LOG_DEBUG("Adding UartLrWpanNetDevice on port " << port
-                      << " to Node with ID: " << node->GetId());
+        NS_LOG_DEBUG("Adding UartLrWpanNetDevice on port "
+                     << port << " to Node with ID: " << node->GetId());
 
         node->AddDevice(uartNetDevice);
-       // uartNetDevice->SetNode(node);
+        // uartNetDevice->SetNode(node);
         devices.Add(uartNetDevice);
     }
     return devices;
@@ -50,10 +49,10 @@ UartLrWpanHelper::Install(NodeContainer c)
 
 void
 UartLrWpanHelper::EnablePcapInternal(std::string prefix,
-                                 Ptr<NetDevice> nd,
-                                 bool promiscuous,
-                                 bool explicitFilename)
+                                     Ptr<NetDevice> nd,
+                                     bool promiscuous,
+                                     bool explicitFilename)
 {
 }
 
-}
+} // namespace ns3

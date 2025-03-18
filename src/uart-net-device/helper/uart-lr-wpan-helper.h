@@ -52,7 +52,7 @@ class UartLrWpanHelper : public PcapHelperForDevice
      */
     NetDeviceContainer Install(NodeContainer c);
 
-      /**
+    /**
      * @brief Enable pcap output on the indicated net device.
      *
      * NetDevice-specific implementation mechanism for hooking the trace and
@@ -67,9 +67,6 @@ class UartLrWpanHelper : public PcapHelperForDevice
                             Ptr<NetDevice> nd,
                             bool promiscuous,
                             bool explicitFilename) override;
-
-
-
 };
 
 } // namespace ns3

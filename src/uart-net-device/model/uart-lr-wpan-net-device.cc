@@ -84,8 +84,8 @@ UartLrWpanNetDevice::GetMac() const
 
 void
 UartLrWpanNetDevice::SetPanAssociation(uint16_t panId,
-                                 Mac16Address coordShortAddr,
-                                 Mac16Address assignedShortAddr)
+                                       Mac16Address coordShortAddr,
+                                       Mac16Address assignedShortAddr)
 {
 }
 
@@ -247,9 +247,9 @@ UartLrWpanNetDevice::Send(Ptr<Packet> packet, const Address& dest, uint16_t prot
 
 bool
 UartLrWpanNetDevice::SendFrom(Ptr<Packet> packet,
-                        const Address& source,
-                        const Address& dest,
-                        uint16_t protocolNumber)
+                              const Address& source,
+                              const Address& dest,
+                              uint16_t protocolNumber)
 {
     NS_ABORT_MSG("Unsupported");
     // TODO: To support SendFrom, the MACs McpsDataRequest has to use the provided source address,
@@ -303,5 +303,5 @@ UartLrWpanNetDevice::SupportsSendFrom() const
     return false;
 }
 
-} // namespace UartLrWpanNetDevice
+} // namespace uart
 } // namespace ns3

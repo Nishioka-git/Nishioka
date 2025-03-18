@@ -174,7 +174,7 @@ class UartLrWpanNetDevice : public NetDevice
     ReceiveCallback m_receiveCallback;
 };
 
-} // namespace UartLrWpanNetDevice
+} // namespace uart
 } // namespace ns3
 
 #endif /* UART_LR_WPAN_NET_DEVICE_H */

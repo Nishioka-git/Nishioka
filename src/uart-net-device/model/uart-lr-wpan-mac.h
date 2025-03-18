@@ -318,7 +318,7 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
     uint32_t m_rxByteCount;
 };
 
-} // namespace uartnetdevice
+} // namespace uart
 } // namespace ns3
 
 #endif /* UART_LRWPAN_MAC_H */

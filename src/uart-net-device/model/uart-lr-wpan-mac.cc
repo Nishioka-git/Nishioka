@@ -1053,5 +1053,5 @@ UartLrWpanMac::RunIoContext()
     g_ioContext.run();
 }
 
-} // namespace uartnetdevice
+} // namespace uart
 } // namespace ns3
