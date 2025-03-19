@@ -19,12 +19,14 @@ endif()
 
 build_lib(
   LIBNAME uart-net-device
-  SOURCE_FILES helper/uart-lr-wpan-helper.cc
-               model/uart-lr-wpan-net-device.cc
-               model/uart-lr-wpan-mac.cc
-  HEADER_FILES helper/uart-lr-wpan-helper.h
-               model/uart-lr-wpan-net-device.h
-               model/uart-lr-wpan-mac.h
+  SOURCE_FILES
+    helper/uart-lr-wpan-helper.cc
+    model/uart-lr-wpan-net-device.cc
+    model/uart-lr-wpan-mac.cc
+  HEADER_FILES
+    helper/uart-lr-wpan-helper.h
+    model/uart-lr-wpan-net-device.h
+    model/uart-lr-wpan-mac.h
   LIBRARIES_TO_LINK ${libboost}
                     ${liblrwpan}
 )

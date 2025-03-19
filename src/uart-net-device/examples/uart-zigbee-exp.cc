@@ -47,7 +47,15 @@ NS_LOG_COMPONENT_DEFINE("ZigbeeAssociationJoin");
 static void
 NwkDataIndication(Ptr<ZigbeeStack> stack, NldeDataIndicationParams params, Ptr<Packet> p)
 {
-    std::cout << "Received packet of size " << p->GetSize() << "\n";
+    std::vector<uint8_t> buffer;
+    buffer.resize(p->GetSize());
+    p->CopyData(buffer.data(), p->GetSize());
+    std::string data(buffer.begin(), buffer.end());
+
+
+    std::cout << "Received packet | " << data << " | Size: " << p->GetSize() << "\n";
+
+
 }
 
 static void
@@ -140,6 +148,8 @@ main(int argc, char* argv[])
 
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
+    // Enable calculation of FCS in the trailers. Only necessary when interacting with real devices
+    GlobalValue::Bind ("ChecksumEnabled", BooleanValue (true));
 
     //// Set UART NetDevice
 

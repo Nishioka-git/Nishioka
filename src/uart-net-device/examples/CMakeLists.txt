@@ -5,8 +5,8 @@ build_lib_example(
 )
 
 build_lib_example(
-  NAME uartRealTime
-  SOURCE_FILES uartRealTime.cc
+  NAME uart-energy-scan
+  SOURCE_FILES uart-energy-scan.cc
   LIBRARIES_TO_LINK ${liblr-wpan}
 )
 
