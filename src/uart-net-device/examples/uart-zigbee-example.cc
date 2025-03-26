@@ -140,8 +140,8 @@ main(int argc, char* argv[])
 
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
-     // Enable calculation of FCS in the trailers. Only necessary when interacting with real devices
-    GlobalValue::Bind ("ChecksumEnabled", BooleanValue (true));
+    // Enable calculation of FCS in the trailers. Only necessary when interacting with real devices
+    GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
 
     //// Set UART NetDevice
 

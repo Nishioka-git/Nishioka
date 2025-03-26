@@ -13,12 +13,14 @@
  *
  * Usage:
  *
- *     Start a device as coordinator:
- *    ./ns3 run "uart-zigbee-exp --coordDev=true"
+ * Start a device as coordinator:
  *
- *     Start a device as router after 30 seconds, assign the
- *     dev id of 1 and transmit data with this id.
- *    ./ns3 run "uart-zigbee-exp --initTime=30 --devId=1"
+ * ./ns3 run "uart-zigbee-exp --coordDev=true"
+ *
+ * Start a device as router after 30 seconds, assign the
+ * dev id of 1 and transmit data with this id.
+ *
+ * ./ns3 run "uart-zigbee-exp --initTime=30 --devId=1"
  */
 
 #include "ns3/constant-position-mobility-model.h"
@@ -52,10 +54,7 @@ NwkDataIndication(Ptr<ZigbeeStack> stack, NldeDataIndicationParams params, Ptr<P
     p->CopyData(buffer.data(), p->GetSize());
     std::string data(buffer.begin(), buffer.end());
 
-
     std::cout << "Received packet | " << data << " | Size: " << p->GetSize() << "\n";
-
-
 }
 
 static void
@@ -149,7 +148,7 @@ main(int argc, char* argv[])
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
     // Enable calculation of FCS in the trailers. Only necessary when interacting with real devices
-    GlobalValue::Bind ("ChecksumEnabled", BooleanValue (true));
+    GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
 
     //// Set UART NetDevice
 

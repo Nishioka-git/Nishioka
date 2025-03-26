@@ -53,7 +53,7 @@ main(int argc, char** argv)
     // We are using a real piece of hardware, therefore we need to use realtime
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::RealtimeSimulatorImpl"));
     // Enable calculation of FCS in the trailers. Only necessary when interacting with real devices
-    GlobalValue::Bind ("ChecksumEnabled", BooleanValue (true));
+    GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
 
     // Create 1 PAN coordinator node, and 1 end device
     Ptr<Node> coord1 = CreateObject<Node>();
