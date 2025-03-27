@@ -1004,11 +1004,11 @@ UartLrWpanMac::BeaconNotifyIndication()
         params.m_panDescriptor.m_coorPanId = BytesToUint16(m_rxData, pos);
         if (params.m_panDescriptor.m_coorAddrMode == lrwpan::AddressMode::EXT_ADDR)
         {
-            BytesToUint64(m_rxData, pos);
+            params.m_panDescriptor.m_coorExtAddr = BytesToUint64(m_rxData, pos);
         }
         else
         {
-            BytesToUint16(m_rxData, pos);
+            params.m_panDescriptor.m_coorShortAddr = BytesToUint16(m_rxData, pos);
         }
         params.m_panDescriptor.m_logCh = BytesToUint8(m_rxData, pos);
         params.m_panDescriptor.m_logChPage = BytesToUint8(m_rxData, pos);

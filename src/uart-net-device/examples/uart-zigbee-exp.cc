@@ -141,6 +141,7 @@ main(int argc, char* argv[])
 
     LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC));
     LogComponentEnable("ZigbeeNwk", LOG_LEVEL_DEBUG);
+    LogComponentEnable("ZigbeeNwkTables", LOG_LEVEL_DEBUG);
     // LogComponentEnable("ZigbeeStack", LOG_LEVEL_DEBUG);
     // LogComponentEnable("UartLrWpanMac", LOG_LEVEL_DEBUG);
     // LogComponentEnable("UartLrWpanNetDevice", LOG_LEVEL_DEBUG);
