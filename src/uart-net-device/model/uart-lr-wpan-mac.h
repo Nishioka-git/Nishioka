@@ -101,6 +101,13 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
 
     void MlmeGetRequest(lrwpan::MacPibAttributeIdentifier id) override;
 
+    /**
+     * Set the nodeId associated to the Netdevice of this MAC
+     *
+     * @param nodeId The node identifier
+     */
+    void SetNodeId(uint32_t nodeId);
+
   protected:
     // Inherited from Object.
     void DoInitialize() override;
@@ -316,6 +323,11 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
      * identified.
      */
     uint32_t m_rxByteCount;
+
+    /**
+     * The node id of Node associated to this MAC layer Netdevice.
+     */
+    uint32_t m_nodeId;
 };
 
 } // namespace uart

@@ -639,11 +639,14 @@ UartLrWpanMac::ReadByte()
                                    m_rxByteCount++;
                                    if (m_rxByteCount == m_paramsMaxSize)
                                    {
-                                       // Simulator::ScheduleWithContext(m_nodeId,Seconds(0),&UartLrWpanMac::ProcessData,
-                                       // this);
-                                       // Simulator::Schedule(Time(0), &UartLrWpanMac::ProcessData,
-                                       // this);
-                                       ProcessData();
+                                       // Schedule an event with the current NodeId context.
+                                       // This is necessary to update the Simulator event time after
+                                       // receiving an external input (In this case, the information
+                                       // received via UART from the MCU)
+                                       Simulator::ScheduleWithContext(
+                                           m_nodeId,
+                                           Time(0),
+                                           MakeEvent(&UartLrWpanMac::ProcessData, this));
                                        m_rxState = RX_START;
                                        m_rxData.clear();
                                        m_rxByteCount = 0;
@@ -1051,6 +1054,16 @@ void
 UartLrWpanMac::RunIoContext()
 {
     g_ioContext.run();
+}
+
+void
+UartLrWpanMac::SetNodeId(uint32_t nodeId)
+{
+    // Save the node ID for use in ProcessData.
+    // This is necessary to update the current context after
+    // receiving data from an external source (The data received
+    // via UART from the MCU)
+    m_nodeId = nodeId;
 }
 
 } // namespace uart

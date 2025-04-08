@@ -269,6 +269,7 @@ UartLrWpanNetDevice::SetNode(Ptr<Node> node)
 {
     NS_LOG_FUNCTION(this);
     m_node = node;
+    m_mac->SetNodeId(m_node->GetId());
 }
 
 bool

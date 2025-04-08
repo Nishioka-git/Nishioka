@@ -130,8 +130,7 @@ NwkJoinConfirm(Ptr<ZigbeeStack> stack, NlmeJoinConfirmParams params)
 int
 main(int argc, char* argv[])
 {
-    LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC));
-    // LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC | LOG_PREFIX_NODE));
+    LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC | LOG_PREFIX_NODE));
     LogComponentEnable("ZigbeeNwk", LOG_LEVEL_DEBUG);
     LogComponentEnable("ZigbeeNwkTables", LOG_LEVEL_DEBUG);
 
