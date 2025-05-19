@@ -48,8 +48,54 @@ enum PrimitiveType
     SET_CFM = 8,
     GET_CFM = 9,
     ORPHAN_IND = 10,
-    BEACON_NOTIFY_IND = 11
+    BEACON_NOTIFY_IND = 11,
+    SENSOR_IND = 20
 };
+
+/**
+ * @ingroup lr-wpan
+ *
+ * Indicates the sensor type of the sensor request.
+ */
+enum class SensorType : std::uint8_t
+{
+    TEMPERATURE_HUMIDITY = 0x00
+};
+
+/**
+ *@ingroup lr-wpan
+ *
+ * SENSOR.request params (Non-standard primitive parameters)
+ */
+struct SensorRequestParams
+{
+    SensorType m_type{SensorType::TEMPERATURE_HUMIDITY}; //!< Sensor type to request
+};
+
+/**
+ * @ingroup lr-wpan
+ *
+ * This structure contains the parameters of the SensorIndicationCallback.
+ * It is used to return the sensor data after a SensorRequest has been called.
+ */
+struct SensorIndicationParams
+{
+    lrwpan::MacStatus m_status{
+        lrwpan::MacStatus::UNSUPPORTED_ATTRIBUTE};       //!< Status of the sensor data request
+    SensorType m_type{SensorType::TEMPERATURE_HUMIDITY}; //!< Sensor type
+    int32_t m_temperature{-99}; //!< Temperature in Celsius degrees, -99 if not available
+    int32_t m_humidity{-99};    //!< Humidity in percentage (0-100), -99 if not available
+};
+
+/**
+ * @ingroup lr-wpan
+ *
+ * This callback is called after a SensorRequest has been called from
+ * the higher layer to set a PIB. It returns a status of the outcome and the
+ * sensor data. Note: Sensor request or indication are not standard
+ * primitives of IEEE 802.15.4.
+ */
+using SensorIndicationCallback = Callback<void, SensorIndicationParams>;
 
 /**
  *  Implements the ns-3 lr-wpan class that communicates with the shim layer of a
@@ -102,13 +148,44 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
     void MlmeGetRequest(lrwpan::MacPibAttributeIdentifier id) override;
 
     /**
-     * Set the nodeId associated to the Netdevice of this MAC
+     * Set the nodeId associated to the Netdevice of this MAC.
+     * This is used to provide context to the MAC layer
      *
      * @param nodeId The node identifier
      */
     void SetNodeId(uint32_t nodeId);
 
+    //////////////////////////
+    //  Optional primitives //
+    //////////////////////////
+
+    /**
+     * Obtain the data of a sensor contained in the device.
+     * This primitive is not compliant with IEEE 802.15.4 and
+     * is meant to be use only with Twelite CUE and Twelite ARIA
+     * (NXP JN5169) devices.
+     *
+     * @param params The Mlme sensor request parameters
+     */
+    void SensorRequest(SensorRequestParams params);
+
+    /**
+     * Set the callback for the indication of sensor data request.
+     * Sensor
+     *
+     * @param c the callback
+     */
+    void SetSensorIndicationCallback(SensorIndicationCallback c);
+
   protected:
+    /**
+     * This callback is used to report sensor data request to the
+     * upper layers.
+     * This callback belongs to a non-standard primitive intended for
+     * JN5169 devices that has sensors (e.g. Twelite CUE and Twelite ARIA).
+     */
+    SensorIndicationCallback m_sensorIndicationCallback;
+
     // Inherited from Object.
     void DoInitialize() override;
     void DoDispose() override;
@@ -272,6 +349,14 @@ class UartLrWpanMac : public lrwpan::LrWpanMacBase
      * callback to be processed by the next higher layer.
      */
     void BeaconNotifyIndication();
+
+    /**
+     * Process the received primitive parameters and triggers a MLME-SENSOR.indication
+     * callback to be processed by the next higher layer.
+     * This primitive indication is not compliant with the standard and is meant to serve
+     * JN5169 devices that contain sensors (such as Tweilite CUE and Twelite ARIA)
+     */
+    void SensorIndication();
 
     /**
      * The port used by the NXP JN516x device associated to this instance.

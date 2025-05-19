@@ -132,7 +132,8 @@ The following examples are provided:
 * ``uart-energy-scan.cc``: Demonstrates the simple use of the model by issuing an energy scan with the IEEE 802.15.4 MLME-SCAN.request primitive (1 device required).
 * ``uart-orphan-scan.cc``: Similar to the previous example but using an orphan scan (2 devices required).
 * ``uart-example.cc``: Demeonstrates an IEEE 802.15.4 association process and data transmission (2 devices required).
-* ``uart-zigbee-example``: Use real devices on top of |ns3| Zigbee networks. In the example, network initialization, join devices, routing and data transmission  is shown (2 or more devices required).
+* ``uart-zigbee-example.cc``: Use real devices on top of |ns3| Zigbee networks. In the example, network initialization, join devices, routing and data transmission  is shown (2 or more devices required).
+* ``uart-sensor.cc``: Obtain sensor data directly from JN5169 devices that supports this feature (i.e. Twelite ARIA, Twelite CUE).
 
 No unit test are included in this project because real devices might not be connected and available during the test checking phase.
 

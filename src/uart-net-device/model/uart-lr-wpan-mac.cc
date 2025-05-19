@@ -117,6 +117,7 @@ UartLrWpanMac::DoDispose()
     m_mlmeCommStatusIndicationCallback = MakeNullCallback<void, MlmeCommStatusIndicationParams>();
     m_mlmeOrphanIndicationCallback = MakeNullCallback<void, MlmeOrphanIndicationParams>();
     m_mlmeSetConfirmCallback = MakeNullCallback<void, MlmeSetConfirmParams>();
+    m_sensorIndicationCallback = MakeNullCallback<void, SensorIndicationParams>();
     Object::DoDispose();
 }
 
@@ -490,6 +491,34 @@ UartLrWpanMac::MlmeGetRequest(MacPibAttributeIdentifier id)
 }
 
 void
+UartLrWpanMac::SensorRequest(SensorRequestParams params)
+{
+    NS_LOG_FUNCTION(this);
+    std::vector<uint8_t> dataBytes;
+
+    Uint8ToBytes(dataBytes, 0xAA); // Begin of data 0xAA
+    Uint8ToBytes(dataBytes, 99);   // primitive type
+    Uint8ToBytes(dataBytes, 1);    // parameter bytes
+    Uint8ToBytes(dataBytes, static_cast<uint8_t>(params.m_type));
+
+    try
+    {
+        boost::asio::write(g_serialPortInstances.at(m_currentInstanceId),
+                           boost::asio::buffer(dataBytes));
+    }
+    catch (const boost::system::system_error& e)
+    {
+        std::cout << "problems while trying to get sensor data\n";
+    }
+}
+
+void
+UartLrWpanMac::SetSensorIndicationCallback(SensorIndicationCallback c)
+{
+    m_sensorIndicationCallback = c;
+}
+
+void
 UartLrWpanMac::Uint8ToBytes(std::vector<uint8_t>& dataArray, uint8_t intValue)
 {
     dataArray.emplace_back(intValue);
@@ -713,6 +742,9 @@ UartLrWpanMac::ProcessData()
         break;
     case BEACON_NOTIFY_IND:
         BeaconNotifyIndication();
+        break;
+    case SENSOR_IND:
+        SensorIndication();
         break;
     default:
         std::cout << "Unknown Primitive with code " << static_cast<uint32_t>(m_rxPrimitiveType)
@@ -1047,6 +1079,40 @@ UartLrWpanMac::BeaconNotifyIndication()
         params.m_sdu = Create<Packet>(sdu.data(), sdu.size());
 
         m_mlmeBeaconNotifyIndicationCallback(params);
+    }
+}
+
+void
+UartLrWpanMac::SensorIndication()
+{
+    SensorIndicationParams params;
+    uint8_t pos = 0;
+
+    params.m_type = static_cast<SensorType>(BytesToUint8(m_rxData, pos));
+    params.m_status = static_cast<MacStatus>(BytesToUint8(m_rxData, pos));
+    switch (params.m_type)
+    {
+    case SensorType::TEMPERATURE_HUMIDITY: {
+        if (params.m_status == MacStatus::SUCCESS)
+        {
+            params.m_temperature = BytesToUint32(m_rxData, pos);
+            params.m_humidity = BytesToUint32(m_rxData, pos);
+        }
+        else
+        {
+            params.m_temperature = -99;
+            params.m_humidity = -99;
+        }
+        break;
+    }
+    default:
+        NS_LOG_DEBUG("Unknown sensor indication ");
+        break;
+    }
+
+    if (!m_sensorIndicationCallback.IsNull())
+    {
+        m_sensorIndicationCallback(params);
     }
 }
 
