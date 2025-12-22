@@ -1,3 +1,7 @@
+# CMakeLists.txt for src directory
+# This file processes modules in the src directory according to NS-3 build system
+
+# Set the list of libraries to build
 set(libs "${libs_to_build}")
 
 # Process the visualizer module first if enabled

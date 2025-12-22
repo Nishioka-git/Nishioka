@@ -1,0 +1,56 @@
+# CMakeLists.txt for multihop-routing module
+
+# Define source files
+set(source_files
+    model/association.cc
+    model/routing-info.cc
+    model/my-routing.cc
+    model/battery-manager.cc
+)
+
+# Define header files
+set(header_files
+    model/association.h
+    model/routing-info.h
+    model/my-routing.h
+    model/battery-manager.h
+)
+
+# Build library
+build_lib(
+  LIBNAME multihop-routing
+  SOURCE_FILES ${source_files}
+  HEADER_FILES ${header_files}
+  LIBRARIES_TO_LINK
+    ${libcore}
+    ${liblr-wpan}
+    ${libnetwork}
+    ${libuart-net-device}
+)
+
+# Optional: Build examples
+if(${ENABLE_EXAMPLES})
+  build_lib_example(
+    NAME multihop-example
+    SOURCE_FILES examples/multihop-example.cc
+    LIBRARIES_TO_LINK ${libmultihop-routing}
+  )
+endif()
+
+# Define module settings with NS3_ prefix for proper initialization
+set(NS3_MULTIHOP_ROUTING ON)
+set(ENABLE_MULTIHOP_ROUTING ON)
+
+# Module dependencies
+set(NS3_MULTIHOP_ROUTING_DEPENDENCIES
+    core
+    lr-wpan
+    network
+    uart-net-device
+)
+
+# Module description
+set(NS3_MULTIHOP_ROUTING_DESCRIPTION "Multi-hop routing protocol with battery awareness")
+
+# Module reason (optional)
+set(NS3_MULTIHOP_ROUTING_REASON "Battery-aware multi-hop routing for LR-WPAN networks")
