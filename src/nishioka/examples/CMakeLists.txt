@@ -13,3 +13,16 @@ build_lib_example(
     ${libantenna}
     ${libstats}
 )
+
+build_lib_example(
+  NAME nishioka-helper-example
+  SOURCE_FILES nishioka-helper-example.cc
+  LIBRARIES_TO_LINK
+    ${libcore}
+    ${libnetwork}
+    ${liblr-wpan}
+    ${libnishioka}
+    ${libspectrum}
+    ${libpropagation}
+    ${libmobility}
+)

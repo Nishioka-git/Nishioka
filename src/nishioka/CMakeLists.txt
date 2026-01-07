@@ -3,9 +3,11 @@ build_lib(
   SOURCE_FILES
     model/nishioka-header.cc
     model/data-payload-header.cc
+    helper/nishioka-helper.cc
   HEADER_FILES
     model/nishioka-header.h
     model/data-payload-header.h
+    helper/nishioka-helper.h
   LIBRARIES_TO_LINK
     ${libspectrum}
 )
