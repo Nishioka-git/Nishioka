@@ -18,6 +18,8 @@
 #include "ns3/mobility-model.h"
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/nishioka-header.h"
+#include "ns3/nishioka-stack.h"
+#include "ns3/nishioka-stack-container.h"
 
 #include <iostream>
 #include <map>
@@ -95,6 +97,14 @@ static Mac16Address g_dev01ShortAddr = Mac16Address("00:02"); // dev01のアド�
 static Ptr<UartLrWpanNetDevice> g_coordinatorDevice; // コーディネータ
 static Ptr<UartLrWpanNetDevice> g_uartNetDevice1; // dev01
 static Ptr<UartLrWpanNetDevice> g_uartNetDevice2; // dev02
+
+// NishiokaStackへのポインタ
+static Ptr<NishiokaStack> g_coordinatorStack; // コーディネータのスタック
+static Ptr<NishiokaStack> g_dev01Stack; // dev01のスタック
+static Ptr<NishiokaStack> g_dev02Stack; // dev02のスタック
+
+// NishiokaStackContainer
+static NishiokaStackContainer g_stacks; // すべてのスタックを管理
 
 // 各デバイスのショートアドレス
 static Mac16Address g_coordinatorAddr = Mac16Address("00:01");
@@ -180,6 +190,29 @@ return g_batteryLevelCoordinator;
 return g_batteryLevelDev01;
 } else if (device == g_uartNetDevice2) {
 return g_batteryLevelDev02;
+}
+return 100; // デフォルト値
+}
+
+// スタックからデバイスを取得するヘルパー関数
+static Ptr<UartLrWpanNetDevice> GetDeviceFromStack(Ptr<NishiokaStack> stack)
+{
+if (stack == g_coordinatorStack) {
+return g_coordinatorDevice;
+} else if (stack == g_dev01Stack) {
+return g_uartNetDevice1;
+} else if (stack == g_dev02Stack) {
+return g_uartNetDevice2;
+}
+return nullptr;
+}
+
+// スタックに対応するバッテリー残量を取得
+static uint8_t GetBatteryLevelFromStack(Ptr<NishiokaStack> stack)
+{
+Ptr<UartLrWpanNetDevice> device = GetDeviceFromStack(stack);
+if (device) {
+return GetBatteryLevel(device);
 }
 return 100; // デフォルト値
 }
@@ -546,8 +579,10 @@ return true;
 }
 
 static void
-DataConfirm(Ptr<UartLrWpanNetDevice> device, McpsDataConfirmParams params)
+DataConfirm(Ptr<NishiokaStack> stack, McpsDataConfirmParams params)
 {
+Ptr<UartLrWpanNetDevice> device = GetDeviceFromStack(stack);
+if (!device) return;
 std::cout << Simulator::Now().As(Time::S) << " [SEND CONFIRM] Node " << device->GetNode()->GetId()
 << ", Data confirm | Status :" << static_cast<uint32_t>(params.m_status)
 << " | Msdu handle " << static_cast<uint32_t>(params.m_msduHandle)
@@ -674,8 +709,10 @@ return static_cast<PacketType>(buffer[0]);
 
 // RREQをブロードキャストする関数
 static void
-SendRREQ(Ptr<UartLrWpanNetDevice> device, Mac16Address dst)
+SendRREQ(Ptr<NishiokaStack> stack, Mac16Address dst)
 {
+Ptr<UartLrWpanNetDevice> device = GetDeviceFromStack(stack);
+if (!device) return;
 Mac16Address myAddress = GetDeviceAddress(device);
 
 RREQPacket rreq;
@@ -683,7 +720,7 @@ rreq.rreqId = g_rreqIdCounter++;
 rreq.originator = myAddress;
 rreq.dst = dst;
 rreq.hopCount = 0;
-rreq.energy = GetBatteryLevel(device);
+rreq.energy = GetBatteryLevelFromStack(stack);
 rreq.lqi = 255;
 
 // このデバイスの処理済みRREQリストに追加
@@ -710,13 +747,15 @@ std::cout << Simulator::Now().As(Time::S)
 << " | Energy: " << (int)rreq.energy << "%"
 << " | Total sent packets: " << g_txCount << std::endl;
 
-device->GetMac()->McpsDataRequest(params, packet);
+stack->GetMac()->McpsDataRequest(params, packet);
 }
 
 // RREQ受信処理
 static void
-HandleRREQ(Ptr<UartLrWpanNetDevice> device, McpsDataIndicationParams params, const RREQPacket& rreq)
+HandleRREQ(Ptr<NishiokaStack> stack, McpsDataIndicationParams params, const RREQPacket& rreq)
 {
+Ptr<UartLrWpanNetDevice> device = GetDeviceFromStack(stack);
+if (!device) return;
 Mac16Address myAddress = GetDeviceAddress(device);
 
 std::cout << Simulator::Now().As(Time::S)
@@ -757,7 +796,7 @@ rrep.rreqId = rreq.rreqId;
 rrep.originator = rreq.originator;
 rrep.dst = myAddress;
 rrep.hopCount = 0;
-rrep.energy = GetBatteryLevel(device);
+rrep.energy = GetBatteryLevelFromStack(stack);
 rrep.lqi = params.m_mpduLinkQuality;
 
 Ptr<Packet> packet = CreateRREPPacket(rrep);
@@ -777,14 +816,14 @@ std::cout << Simulator::Now().As(Time::S)
 << " | RREP ID: " << rrep.rreqId
 << " | Total sent packets: " << g_txCount << std::endl;
 
-device->GetMac()->McpsDataRequest(replyParams, packet);
+stack->GetMac()->McpsDataRequest(replyParams, packet);
 } else {
 // 目的地ではない場合、RREQを転送（ブロードキャスト）
 std::cout << "  [INFO] Forwarding RREQ" << std::endl;
 
 RREQPacket forwardRreq = rreq;
 forwardRreq.hopCount++;
-forwardRreq.energy = GetBatteryLevel(device);
+forwardRreq.energy = GetBatteryLevelFromStack(stack);
 forwardRreq.lqi = params.m_mpduLinkQuality;
 
 Ptr<Packet> packet = CreateRREQPacket(forwardRreq);
@@ -798,14 +837,16 @@ forwardParams.m_txOptions = 0;
 forwardParams.m_srcAddrMode = SHORT_ADDR;
 
 g_txCount++;
-device->GetMac()->McpsDataRequest(forwardParams, packet);
+stack->GetMac()->McpsDataRequest(forwardParams, packet);
 }
 }
 
 // RREP受信処理
 static void
-HandleRREP(Ptr<UartLrWpanNetDevice> device, McpsDataIndicationParams params, const RREPPacket& rrep)
+HandleRREP(Ptr<NishiokaStack> stack, McpsDataIndicationParams params, const RREPPacket& rrep)
 {
+Ptr<UartLrWpanNetDevice> device = GetDeviceFromStack(stack);
+if (!device) return;
 Mac16Address myAddress = GetDeviceAddress(device);
 
 std::cout << Simulator::Now().As(Time::S)
@@ -834,7 +875,7 @@ std::cout << "  [INFO] Forwarding RREP to originator" << std::endl;
 
 RREPPacket forwardRrep = rrep;
 forwardRrep.hopCount++;
-forwardRrep.energy = GetBatteryLevel(device);
+forwardRrep.energy = GetBatteryLevelFromStack(stack);
 forwardRrep.lqi = params.m_mpduLinkQuality;
 
 Ptr<Packet> packet = CreateRREPPacket(forwardRrep);
@@ -848,15 +889,17 @@ forwardParams.m_txOptions = 0;
 forwardParams.m_srcAddrMode = SHORT_ADDR;
 
 g_txCount++;
-device->GetMac()->McpsDataRequest(forwardParams, packet);
+stack->GetMac()->McpsDataRequest(forwardParams, packet);
 } else {
 std::cout << "  [ERROR] No route back to originator " << rrep.originator << std::endl;
 }
 }
 
 static void
-DataIndication(Ptr<UartLrWpanNetDevice> device, McpsDataIndicationParams params, Ptr<Packet> p)
+DataIndication(Ptr<NishiokaStack> stack, McpsDataIndicationParams params, Ptr<Packet> p)
 {
+Ptr<UartLrWpanNetDevice> device = GetDeviceFromStack(stack);
+if (!device) return;
 g_rxCount++;
 
 // パケットタイプを確認
@@ -866,7 +909,7 @@ PacketType pktType = GetPacketType(p);
 if (pktType == PACKET_TYPE_RREQ) {
 RREQPacket rreq;
 if (ParseRREQPacket(p, rreq)) {
-HandleRREQ(device, params, rreq);
+HandleRREQ(stack, params, rreq);
 }
 return;
 }
@@ -875,7 +918,7 @@ return;
 if (pktType == PACKET_TYPE_RREP) {
 RREPPacket rrep;
 if (ParseRREPPacket(p, rrep)) {
-HandleRREP(device, params, rrep);
+HandleRREP(stack, params, rrep);
 }
 return;
 }
@@ -904,8 +947,10 @@ std::cout << Simulator::Now().As(Time::S) << " [RECEIVE] Node " << device->GetNo
 
 // 受信したパケットを処理し、必要に応じて転送
 static void
-RelayAndIndicate(Ptr<UartLrWpanNetDevice> device, McpsDataIndicationParams params, Ptr<Packet> p)
+RelayAndIndicate(Ptr<NishiokaStack> stack, McpsDataIndicationParams params, Ptr<Packet> p)
 {
+Ptr<UartLrWpanNetDevice> device = GetDeviceFromStack(stack);
+if (!device) return;
 g_rxCount++;
 
 // パケットタイプを確認
@@ -915,7 +960,7 @@ PacketType pktType = GetPacketType(p);
 if (pktType == PACKET_TYPE_RREQ) {
 RREQPacket rreq;
 if (ParseRREQPacket(p, rreq)) {
-HandleRREQ(device, params, rreq);
+HandleRREQ(stack, params, rreq);
 }
 return;
 }
@@ -924,7 +969,7 @@ return;
 if (pktType == PACKET_TYPE_RREP) {
 RREPPacket rrep;
 if (ParseRREPPacket(p, rrep)) {
-HandleRREP(device, params, rrep);
+HandleRREP(stack, params, rrep);
 }
 return;
 }
@@ -984,7 +1029,7 @@ return;
 // 受信したエントリのホップ数、LQI、バッテリー残量を更新
 receivedEntry.hops++;
 receivedEntry.lqi = params.m_mpduLinkQuality; // 最新のLQIで更新
-receivedEntry.energy = GetBatteryLevel(device); // 中継デバイスの最新バッテリー残量
+receivedEntry.energy = GetBatteryLevelFromStack(stack); // 中継デバイスの最新バッテリー残量
 // dst と nextHop が一致しているかチェック
 if (routeEntry.dst == routeEntry.nextHop) {
 std::cout << " [ROUTING] Dst matches NextHop - Final hop to destination!\n";
@@ -1012,7 +1057,7 @@ relayParams.m_srcAddrMode = SHORT_ADDR;
 
 g_txCount++;
 std::cout << "  Total sent packets: " << g_txCount << std::endl;
-device->GetMac()->McpsDataRequest(relayParams, forwardPacket);
+stack->GetMac()->McpsDataRequest(relayParams, forwardPacket);
 } else {
 std::cout << " [ROUTING ERROR] No route found for destination: "
 << receivedEntry.dst << std::endl;
@@ -1069,7 +1114,7 @@ associateParams.m_coordAddrMode = SHORT_ADDR;
 associateParams.m_coordPanId = 0xCAFE;
 associateParams.m_capabilityInfo = 0x80; // short address割当希望
 associateParams.m_coordShortAddr = g_dev01ShortAddr;
-g_uartNetDevice2->GetMac()->MlmeAssociateRequest(associateParams);
+g_dev02Stack->GetMac()->MlmeAssociateRequest(associateParams);
 });
 }
 // dev02のアソシエーション成功後、RREQでルート発見してからメッセージを送信
@@ -1084,7 +1129,7 @@ std::cout << "===============================================\n\n";
 Simulator::Schedule(Seconds(0.2), [=]() {
 Mac16Address targetAddr = Mac16Address("00:03"); // dev02のアドレス
 std::cout << "Coordinator initiating route discovery to dev02\n";
-SendRREQ(g_coordinatorDevice, targetAddr);
+SendRREQ(g_coordinatorStack, targetAddr);
 
 // RREPを待ってからデータ送信（1秒後）
 Simulator::Schedule(Seconds(1.0), [=]() {
@@ -1111,7 +1156,7 @@ dataParams.m_srcAddrMode = SHORT_ADDR;
 
 g_txCount++;
 std::cout << "  Total sent packets: " << g_txCount << std::endl;
-g_coordinatorDevice->GetMac()->McpsDataRequest(dataParams, packet);
+g_coordinatorStack->GetMac()->McpsDataRequest(dataParams, packet);
 } else {
 std::cout << "  [ERROR] No route to dev02 found after RREQ!" << std::endl;
 }
@@ -1166,6 +1211,13 @@ Ptr<ConstantPositionMobilityModel> mobility0 = CreateObject<ConstantPositionMobi
 mobility0->SetPosition(Vector(0, 0, 0));
 node->AggregateObject(mobility0);
 
+// Create and install NishiokaStack for coordinator
+g_coordinatorStack = CreateObject<NishiokaStack>();
+g_coordinatorStack->SetNetDevice(g_coordinatorDevice);
+node->AggregateObject(g_coordinatorStack);
+g_coordinatorStack->Initialize();
+g_stacks.Add(g_coordinatorStack);
+
 // End Device 1 (dev01)
 Ptr<Node> node2 = CreateObject<Node>();
 g_uartNetDevice1 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB1");
@@ -1174,6 +1226,13 @@ Ptr<ConstantPositionMobilityModel> mobility1 = CreateObject<ConstantPositionMobi
 mobility1->SetPosition(Vector(0, 90, 0));
 node2->AggregateObject(mobility1);
 
+// Create and install NishiokaStack for dev01
+g_dev01Stack = CreateObject<NishiokaStack>();
+g_dev01Stack->SetNetDevice(g_uartNetDevice1);
+node2->AggregateObject(g_dev01Stack);
+g_dev01Stack->Initialize();
+g_stacks.Add(g_dev01Stack);
+
 // End Device 2 (dev02)
 Ptr<Node> node3 = CreateObject<Node>();
 g_uartNetDevice2 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB2");
@@ -1181,47 +1240,55 @@ node3->AddDevice(g_uartNetDevice2);
 Ptr<ConstantPositionMobilityModel> mobility2 = CreateObject<ConstantPositionMobilityModel>();
 mobility2->SetPosition(Vector(0, 180, 0));
 node3->AggregateObject(mobility2);
-// コールバック設定
-g_coordinatorDevice->GetMac()->SetMcpsDataConfirmCallback(
-MakeBoundCallback(&DataConfirm, g_coordinatorDevice));
-g_coordinatorDevice->GetMac()->SetMcpsDataIndicationCallback(
-MakeBoundCallback(&DataIndication, g_coordinatorDevice)); // コーディネータの受信コールバック
-g_coordinatorDevice->GetMac()->SetMlmeAssociateIndicationCallback(
+
+// Create and install NishiokaStack for dev02
+g_dev02Stack = CreateObject<NishiokaStack>();
+g_dev02Stack->SetNetDevice(g_uartNetDevice2);
+node3->AggregateObject(g_dev02Stack);
+g_dev02Stack->Initialize();
+g_stacks.Add(g_dev02Stack);
+
+// コールバック設定（NishiokaStack経由）
+g_coordinatorStack->GetMac()->SetMcpsDataConfirmCallback(
+MakeBoundCallback(&DataConfirm, g_coordinatorStack));
+g_coordinatorStack->GetMac()->SetMcpsDataIndicationCallback(
+MakeBoundCallback(&DataIndication, g_coordinatorStack)); // コーディネータの受信コールバック
+g_coordinatorStack->GetMac()->SetMlmeAssociateIndicationCallback(
 MakeBoundCallback(&AssociateIndication, g_coordinatorDevice));
-g_uartNetDevice1->GetMac()->SetMcpsDataIndicationCallback(
-MakeBoundCallback(&RelayAndIndicate, g_uartNetDevice1));
-g_uartNetDevice1->GetMac()->SetMlmeAssociateConfirmCallback(
+g_dev01Stack->GetMac()->SetMcpsDataIndicationCallback(
+MakeBoundCallback(&RelayAndIndicate, g_dev01Stack));
+g_dev01Stack->GetMac()->SetMlmeAssociateConfirmCallback(
 MakeBoundCallback(&AssociateConfirm, g_uartNetDevice1));
-g_uartNetDevice1->GetMac()->SetMlmeAssociateIndicationCallback(
+g_dev01Stack->GetMac()->SetMlmeAssociateIndicationCallback(
 MakeBoundCallback(&AssociateIndicationDev01, g_uartNetDevice1));
-g_uartNetDevice2->GetMac()->SetMcpsDataIndicationCallback(
-MakeBoundCallback(&DataIndication, g_uartNetDevice2));
-g_uartNetDevice2->GetMac()->SetMlmeAssociateConfirmCallback(
+g_dev02Stack->GetMac()->SetMcpsDataIndicationCallback(
+MakeBoundCallback(&DataIndication, g_dev02Stack));
+g_dev02Stack->GetMac()->SetMlmeAssociateConfirmCallback(
 MakeBoundCallback(&AssociateConfirm, g_uartNetDevice2));
 // チャンネル・アドレス設定（必要最低限）
 Ptr<MacPibAttributes> pibAttr0 = Create<MacPibAttributes>();
 pibAttr0->pCurrentChannel = 0xD; // 13ch
-g_coordinatorDevice->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
-g_uartNetDevice1->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
-g_uartNetDevice2->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
+g_coordinatorStack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
+g_dev01Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
+g_dev02Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
 
 Ptr<MacPibAttributes> pibAttr1 = Create<MacPibAttributes>();
 pibAttr1->macShortAddress = Mac16Address("00:01");
-g_coordinatorDevice->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr1);
+g_coordinatorStack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr1);
 Ptr<MacPibAttributes> pibAttr2 = Create<MacPibAttributes>();
 pibAttr2->macShortAddress = Mac16Address("FF:FE"); // 仮アドレス（アソシエーション後に割当）
-g_uartNetDevice1->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr2);
+g_dev01Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr2);
 Ptr<MacPibAttributes> pibAttr3 = Create<MacPibAttributes>();
 pibAttr3->macShortAddress = Mac16Address("FF:FD"); // 仮アドレス（アソシエーション後に割当）
-g_uartNetDevice2->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr3);
+g_dev02Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr3);
 
 // PAN IDもエンドデバイス側で明示的に設定
 Ptr<MacPibAttributes> pibAttrPan1 = Create<MacPibAttributes>();
 pibAttrPan1->macPanId = 0xCAFE;
-g_uartNetDevice1->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, pibAttrPan1);
+g_dev01Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, pibAttrPan1);
 Ptr<MacPibAttributes> pibAttrPan2 = Create<MacPibAttributes>();
 pibAttrPan2->macPanId = 0xCAFE;
-g_uartNetDevice2->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, pibAttrPan2);
+g_dev02Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, pibAttrPan2);
 // コーディネータとしてネットワーク開始
 MlmeStartRequestParams startParams;
 startParams.m_PanId = 0xCAFE;
@@ -1232,7 +1299,7 @@ startParams.m_sfrmOrd = 15;
 startParams.m_panCoor = true;
 startParams.m_battLifeExt = false;
 startParams.m_coorRealgn = false;
-g_coordinatorDevice->GetMac()->MlmeStartRequest(startParams);
+g_coordinatorStack->GetMac()->MlmeStartRequest(startParams);
 
 // バッテリー残量の初期読み込み
 std::cout << "\n========== Initial Battery Level Reading ==========\n";
@@ -1251,7 +1318,7 @@ associateParams.m_coordAddrMode = SHORT_ADDR;
 associateParams.m_coordPanId = 0xCAFE;
 associateParams.m_capabilityInfo = 0x80; // short address割当希望
 associateParams.m_coordShortAddr = Mac16Address("00:01"); // コーディネータのアドレス
-g_uartNetDevice1->GetMac()->MlmeAssociateRequest(associateParams);
+g_dev01Stack->GetMac()->MlmeAssociateRequest(associateParams);
 });
 // dev02のアソシエーション要求はAssociateConfirmでスケジューリング
 // シミュレーション終了前にルーティングテーブルを表示
