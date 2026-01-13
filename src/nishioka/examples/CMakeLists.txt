@@ -26,3 +26,16 @@ build_lib_example(
     ${libpropagation}
     ${libmobility}
 )
+
+build_lib_example(
+  NAME nishioka-stack-simple
+  SOURCE_FILES nishioka-stack-simple.cc
+  LIBRARIES_TO_LINK
+    ${libcore}
+    ${libnetwork}
+    ${liblr-wpan}
+    ${libnishioka}
+    ${libspectrum}
+    ${libpropagation}
+    ${libmobility}
+)
