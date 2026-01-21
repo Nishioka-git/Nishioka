@@ -21,6 +21,7 @@
 #include "ns3/nishioka-stack.h"
 #include "ns3/nishioka-stack-container.h"
 #include "ns3/nishioka-helper.h"
+#include "ns3/nishioka-nwk.h"
 
 #include <iostream>
 #include <map>
@@ -216,6 +217,28 @@ if (device) {
 return GetBatteryLevel(device);
 }
 return 100; // デフォルト値
+}
+
+// スタックからNWK層を取得するヘルパー関数
+static Ptr<NishiokaNwk> GetNwkFromStack(Ptr<NishiokaStack> stack)
+{
+if (stack) {
+return stack->GetNwk();
+}
+return nullptr;
+}
+
+// デバイスからスタックを取得するヘルパー関数
+static Ptr<NishiokaStack> GetStackFromDevice(Ptr<UartLrWpanNetDevice> device)
+{
+if (device == g_coordinatorDevice) {
+return g_coordinatorStack;
+} else if (device == g_uartNetDevice1) {
+return g_dev01Stack;
+} else if (device == g_uartNetDevice2) {
+return g_dev02Stack;
+}
+return nullptr;
 }
 
 // バッテリーファイルのパスを取得する関数
@@ -446,6 +469,16 @@ std::cout << " [ROUTE LEARNING] Better route found! Updating route to "
 UpdateRoutingEntry(myRoutingTable, sourceDst, nextHop, energy, lqi, hops);
 } else {
 std::cout << " [ROUTE LEARNING] Existing route is better. No update." << std::endl;
+}
+}
+
+// NWK層のルーティングテーブルも更新
+Ptr<NishiokaStack> stack = GetStackFromDevice(device);
+if (stack) {
+Ptr<NishiokaNwk> nwk = stack->GetNwk();
+if (nwk) {
+nwk->SetRoute(sourceDst, nextHop);
+std::cout << "  [NWK] Updated route to " << sourceDst << " via " << nextHop << std::endl;
 }
 }
 }
@@ -1013,16 +1046,31 @@ return; // 自分宛なので転送せず終了
 
 // 最終目的地ではないので転送処理
 std::cout << " [INFO] Not for me (dst=" << receivedEntry.dst << "). Looking for route...\n";
-// 自分のルーティングテーブルを取得
+// まずNWK層のルーティングテーブルを参照
+Ptr<NishiokaNwk> nwk = stack->GetNwk();
+Mac16Address nextHop;
+bool routeFound = false;
+
+if (nwk && nwk->GetNextHop(receivedEntry.dst, nextHop)) {
+// NWK層からルートが見つかった
+std::cout << " [ROUTING] Route found via NWK layer - NextHop: " << nextHop << std::endl;
+routeFound = true;
+} else {
+// フォールバック: アプリケーション層のルーティングテーブルを参照
 std::map<Mac16Address, RoutingEntry>& myRoutingTable = GetRoutingTable(device);
-// ルーティングテーブルから次ホップを検索
 auto it = myRoutingTable.find(receivedEntry.dst);
 if (it != myRoutingTable.end()) {
-RoutingEntry& routeEntry = it->second;
+nextHop = it->second.nextHop;
+routeFound = true;
+std::cout << " [ROUTING] Route found via application layer - NextHop: " << nextHop << std::endl;
+}
+}
+
+if (routeFound) {
 // 逆走防止アルゴリズム：nextHopから送信元アドレス（params.m_srcAddr）を除外
 // → nextHopが送信元と同じ場合は、そこには送信しない（ループ防止）
-if (routeEntry.nextHop == params.m_srcAddr) {
-std::cout << " [ROUTING ERROR] NextHop(" << routeEntry.nextHop
+if (nextHop == params.m_srcAddr) {
+std::cout << " [ROUTING ERROR] NextHop(" << nextHop
 << ") is same as sender(" << params.m_srcAddr
 << "). Preventing reverse routing!\n";
 return;
@@ -1032,12 +1080,12 @@ receivedEntry.hops++;
 receivedEntry.lqi = params.m_mpduLinkQuality; // 最新のLQIで更新
 receivedEntry.energy = GetBatteryLevelFromStack(stack); // 中継デバイスの最新バッテリー残量
 // dst と nextHop が一致しているかチェック
-if (routeEntry.dst == routeEntry.nextHop) {
+if (receivedEntry.dst == nextHop) {
 std::cout << " [ROUTING] Dst matches NextHop - Final hop to destination!\n";
 } else {
-std::cout << " [ROUTING] Intermediate hop - NextHop: " << routeEntry.nextHop << "\n";
+std::cout << " [ROUTING] Intermediate hop - NextHop: " << nextHop << "\n";
 }
-std::cout << " [ROUTING] Route found - NextHop: " << routeEntry.nextHop
+std::cout << " [ROUTING] Route found - NextHop: " << nextHop
 << " | Updated Hops: " << (int)receivedEntry.hops
 << " | Updated LQI: " << (int)receivedEntry.lqi
 << " | Battery: " << (int)receivedEntry.energy << "%" << std::endl;
@@ -1045,13 +1093,13 @@ std::cout << " [ROUTING] Route found - NextHop: " << routeEntry.nextHop
 Mac16Address myAddr = GetDeviceAddress(device);
 std::cout << Simulator::Now().As(Time::S)
 << " [RELAY/SEND] Node " << device->GetNode()->GetId()
-<< " -> Node " << routeEntry.nextHop << " (Forwarding with updated NishiokaHeader)\n";
+<< " -> Node " << nextHop << " (Forwarding with updated NishiokaHeader)\n";
 Ptr<Packet> forwardPacket = CreatePacketWithRoutingInfo(receivedEntry, data, myAddr);
 // 次ホップへ転送
 McpsDataRequestParams relayParams;
 relayParams.m_dstPanId = 0xCAFE;
 relayParams.m_dstAddrMode = SHORT_ADDR;
-relayParams.m_dstAddr = routeEntry.nextHop; // ルーティングテーブルから取得したnextHop
+relayParams.m_dstAddr = nextHop; // NWK層またはアプリケーション層から取得したnextHop
 relayParams.m_msduHandle = 2;
 relayParams.m_txOptions = 0;
 relayParams.m_srcAddrMode = SHORT_ADDR;
@@ -1064,6 +1112,7 @@ std::cout << " [ROUTING ERROR] No route found for destination: "
 << receivedEntry.dst << std::endl;
 }
 }
+
 static void
 AssociateIndication(Ptr<UartLrWpanNetDevice> device, MlmeAssociateIndicationParams params)
 {
@@ -1231,11 +1280,18 @@ g_coordinatorStack = g_stacks.Get(0);
 g_dev01Stack = g_stacks.Get(1);
 g_dev02Stack = g_stacks.Get(2);
 
-// コールバック設定（NishiokaStack経由）
+// Configure MAC layer settings using helper (channel, PAN ID, addresses)
+std::vector<Mac16Address> addresses;
+addresses.push_back(Mac16Address("00:01"));  // Coordinator
+addresses.push_back(Mac16Address("FF:FE"));  // Dev01 (temporary, will be assigned during association)
+addresses.push_back(Mac16Address("FF:FD"));  // Dev02 (temporary, will be assigned during association)
+helper.ConfigureMac(g_stacks, 0xD, 0xCAFE, addresses);
+
+// Set up callbacks (application-specific, cannot be automated in helper)
 g_coordinatorStack->GetMac()->SetMcpsDataConfirmCallback(
 MakeBoundCallback(&DataConfirm, g_coordinatorStack));
 g_coordinatorStack->GetMac()->SetMcpsDataIndicationCallback(
-MakeBoundCallback(&DataIndication, g_coordinatorStack)); // コーディネータの受信コールバック
+MakeBoundCallback(&DataIndication, g_coordinatorStack));
 g_coordinatorStack->GetMac()->SetMlmeAssociateIndicationCallback(
 MakeBoundCallback(&AssociateIndication, g_coordinatorDevice));
 g_dev01Stack->GetMac()->SetMcpsDataIndicationCallback(
@@ -1248,30 +1304,6 @@ g_dev02Stack->GetMac()->SetMcpsDataIndicationCallback(
 MakeBoundCallback(&DataIndication, g_dev02Stack));
 g_dev02Stack->GetMac()->SetMlmeAssociateConfirmCallback(
 MakeBoundCallback(&AssociateConfirm, g_uartNetDevice2));
-// チャンネル・アドレス設定（必要最低限）
-Ptr<MacPibAttributes> pibAttr0 = Create<MacPibAttributes>();
-pibAttr0->pCurrentChannel = 0xD; // 13ch
-g_coordinatorStack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
-g_dev01Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
-g_dev02Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttr0);
-
-Ptr<MacPibAttributes> pibAttr1 = Create<MacPibAttributes>();
-pibAttr1->macShortAddress = Mac16Address("00:01");
-g_coordinatorStack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr1);
-Ptr<MacPibAttributes> pibAttr2 = Create<MacPibAttributes>();
-pibAttr2->macShortAddress = Mac16Address("FF:FE"); // 仮アドレス（アソシエーション後に割当）
-g_dev01Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr2);
-Ptr<MacPibAttributes> pibAttr3 = Create<MacPibAttributes>();
-pibAttr3->macShortAddress = Mac16Address("FF:FD"); // 仮アドレス（アソシエーション後に割当）
-g_dev02Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttr3);
-
-// PAN IDもエンドデバイス側で明示的に設定
-Ptr<MacPibAttributes> pibAttrPan1 = Create<MacPibAttributes>();
-pibAttrPan1->macPanId = 0xCAFE;
-g_dev01Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, pibAttrPan1);
-Ptr<MacPibAttributes> pibAttrPan2 = Create<MacPibAttributes>();
-pibAttrPan2->macPanId = 0xCAFE;
-g_dev02Stack->GetMac()->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, pibAttrPan2);
 // コーディネータとしてネットワーク開始
 MlmeStartRequestParams startParams;
 startParams.m_PanId = 0xCAFE;
@@ -1309,10 +1341,19 @@ Simulator::Schedule(Seconds(4.9), []() {
 std::cout << "\n========== Final Routing Tables (After RREQ/RREP) ==========\n";
 std::cout << "Coordinator:\n";
 PrintRoutingTable(g_routingTableCoordinator);
+if (g_coordinatorStack && g_coordinatorStack->GetNwk()) {
+std::cout << "  NWK Layer Routes: " << g_coordinatorStack->GetNwk()->GetRouteCount() << std::endl;
+}
 std::cout << "Dev01:\n";
 PrintRoutingTable(g_routingTableDev01);
+if (g_dev01Stack && g_dev01Stack->GetNwk()) {
+std::cout << "  NWK Layer Routes: " << g_dev01Stack->GetNwk()->GetRouteCount() << std::endl;
+}
 std::cout << "Dev02:\n";
 PrintRoutingTable(g_routingTableDev02);
+if (g_dev02Stack && g_dev02Stack->GetNwk()) {
+std::cout << "  NWK Layer Routes: " << g_dev02Stack->GetNwk()->GetRouteCount() << std::endl;
+}
 });
 
 Simulator::Stop(Seconds(5));

@@ -15,6 +15,8 @@
 #include "ns3/net-device.h"
 #include "ns3/nishioka-stack.h"
 #include "ns3/constant-position-mobility-model.h"
+#include "ns3/lr-wpan-mac-base.h"
+#include "ns3/lr-wpan-fields.h"
 
 namespace ns3
 {
@@ -304,6 +306,66 @@ NishiokaHelper::SetStackAttribute(std::string n1, const AttributeValue& v1)
 {
     NS_LOG_FUNCTION(this << n1);
     m_stackFactory.Set(n1, v1);
+}
+
+void
+NishiokaHelper::ConfigureMac(nishioka::NishiokaStackContainer& stacks,
+                               uint8_t channel,
+                               uint16_t panId,
+                               const std::vector<Mac16Address>& addresses)
+{
+    NS_LOG_FUNCTION(this << (int)channel << (int)panId);
+
+    using namespace ns3::lrwpan;
+
+    // Set channel for all stacks
+    Ptr<MacPibAttributes> pibAttrChannel = Create<MacPibAttributes>();
+    pibAttrChannel->pCurrentChannel = channel;
+
+    // Set PAN ID for all stacks
+    Ptr<MacPibAttributes> pibAttrPan = Create<MacPibAttributes>();
+    pibAttrPan->macPanId = panId;
+
+    for (uint32_t i = 0; i < stacks.GetN(); ++i)
+    {
+        Ptr<nishioka::NishiokaStack> stack = stacks.Get(i);
+        if (!stack)
+        {
+            NS_LOG_WARN("Stack at index " << i << " is null");
+            continue;
+        }
+
+        // Initialize stack if not already initialized (required to access MAC layer)
+        if (!stack->GetMac())
+        {
+            NS_LOG_LOGIC("Initializing stack at index " << i << " to access MAC layer");
+            stack->Initialize();
+        }
+
+        Ptr<LrWpanMacBase> mac = stack->GetMac();
+        if (!mac)
+        {
+            NS_LOG_WARN("MAC layer not available for stack at index " << i);
+            continue;
+        }
+
+        // Set channel
+        mac->MlmeSetRequest(MacPibAttributeIdentifier::pCurrentChannel, pibAttrChannel);
+        NS_LOG_LOGIC("Set channel " << (int)channel << " for stack " << i);
+
+        // Set PAN ID
+        mac->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, pibAttrPan);
+        NS_LOG_LOGIC("Set PAN ID 0x" << std::hex << panId << std::dec << " for stack " << i);
+
+        // Set address if provided
+        if (!addresses.empty() && i < addresses.size())
+        {
+            Ptr<MacPibAttributes> pibAttrAddr = Create<MacPibAttributes>();
+            pibAttrAddr->macShortAddress = addresses[i];
+            mac->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, pibAttrAddr);
+            NS_LOG_LOGIC("Set address " << addresses[i] << " for stack " << i);
+        }
+    }
 }
 
 } // namespace ns3

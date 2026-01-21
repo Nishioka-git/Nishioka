@@ -175,6 +175,20 @@ class NishiokaHelper
      */
     void SetStackAttribute(std::string n1, const AttributeValue& v1);
 
+    /**
+     * Configure MAC layer settings for all stacks in the container.
+     * This method sets common MAC parameters like channel, PAN ID, and addresses.
+     *
+     * @param stacks Container of NishiokaStacks to configure
+     * @param channel Channel number (default: 0xD)
+     * @param panId PAN ID (default: 0xCAFE)
+     * @param addresses Vector of MAC addresses for each stack (optional, empty for default)
+     */
+    void ConfigureMac(nishioka::NishiokaStackContainer& stacks,
+                      uint8_t channel = 0xD,
+                      uint16_t panId = 0xCAFE,
+                      const std::vector<Mac16Address>& addresses = std::vector<Mac16Address>());
+
   private:
     uint8_t m_seqNumCounter; //!< Sequence number counter
     ObjectFactory m_stackFactory; //!< NishiokaStack object factory

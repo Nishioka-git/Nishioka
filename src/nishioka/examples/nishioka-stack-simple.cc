@@ -19,6 +19,7 @@
 #include "ns3/nishioka-header.h"
 #include "ns3/nishioka-helper.h"
 #include "ns3/nishioka-stack.h"
+#include "ns3/nishioka-stack-container.h"
 #include "ns3/nishioka-nwk.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
@@ -158,25 +159,18 @@ main(int argc, char* argv[])
     LrWpanHelper lrWpanHelper;
     NetDeviceContainer devices = lrWpanHelper.Install(nodes);
 
-    // Set addresses
-    Ptr<LrWpanNetDevice> dev0 = devices.Get(0)->GetObject<LrWpanNetDevice>();
-    Ptr<LrWpanNetDevice> dev1 = devices.Get(1)->GetObject<LrWpanNetDevice>();
-
-    dev0->GetMac()->SetShortAddress(Mac16Address("00:01"));
-    dev1->GetMac()->SetShortAddress(Mac16Address("00:02"));
-    dev0->GetMac()->SetPanId(0xCAFE);
-    dev1->GetMac()->SetPanId(0xCAFE);
-
-    // Set channel
+    // Set channel for devices
     for (uint32_t i = 0; i < devices.GetN(); i++)
     {
         Ptr<LrWpanNetDevice> dev = devices.Get(i)->GetObject<LrWpanNetDevice>();
         dev->SetChannel(channel);
     }
 
-    std::cout << "Installed LrWpanNetDevices\n";
-    std::cout << "  Node 0: Address " << dev0->GetMac()->GetShortAddress() << "\n";
-    std::cout << "  Node 1: Address " << dev1->GetMac()->GetShortAddress() << "\n" << std::endl;
+    // Get devices
+    Ptr<LrWpanNetDevice> dev0 = devices.Get(0)->GetObject<LrWpanNetDevice>();
+    Ptr<LrWpanNetDevice> dev1 = devices.Get(1)->GetObject<LrWpanNetDevice>();
+
+    std::cout << "Installed LrWpanNetDevices\n" << std::endl;
 
     // Create and install NishiokaStack
     Ptr<NishiokaStack> stack0 = CreateObject<NishiokaStack>();
@@ -188,10 +182,32 @@ main(int argc, char* argv[])
     nodes.Get(0)->AggregateObject(stack0);
     nodes.Get(1)->AggregateObject(stack1);
 
-    stack0->Initialize();
-    stack1->Initialize();
+    // Note: Initialize() is called automatically by ns-3 when simulation starts
+    // No need to call it explicitly here
 
     std::cout << "Installed NishiokaStack on both nodes\n" << std::endl;
+
+    // Configure MAC layer settings using helper
+    NishiokaHelper helper;
+    NishiokaStackContainer stacks;
+    stacks.Add(stack0);
+    stacks.Add(stack1);
+
+    // Set MAC addresses and PAN ID using helper
+    std::vector<Mac16Address> addresses;
+    addresses.push_back(Mac16Address("00:01"));  // Node 0
+    addresses.push_back(Mac16Address("00:02"));    // Node 1
+    helper.ConfigureMac(stacks, 0xD, 0xCAFE, addresses);
+
+    // For LrWpanNetDevice, also set addresses directly to ensure they are set
+    dev0->GetMac()->SetShortAddress(Mac16Address("00:01"));
+    dev1->GetMac()->SetShortAddress(Mac16Address("00:02"));
+    dev0->GetMac()->SetPanId(0xCAFE);
+    dev1->GetMac()->SetPanId(0xCAFE);
+
+    std::cout << "Configured MAC layer settings\n";
+    std::cout << "  Node 0: Address " << dev0->GetMac()->GetShortAddress() << "\n";
+    std::cout << "  Node 1: Address " << dev1->GetMac()->GetShortAddress() << "\n" << std::endl;
 
     // Set up routing in NWK layer (example: if node 0 wants to send to node 1 via node 2)
     // For this simple example, we set direct routes

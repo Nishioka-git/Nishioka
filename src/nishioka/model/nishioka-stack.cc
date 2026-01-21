@@ -89,7 +89,8 @@ NishiokaStack::DoInitialize()
     }
 
     NS_LOG_INFO("NishiokaStack initialized: Node=" << m_node->GetId()
-                                                    << " NetDevice=" << m_netDevice);
+                                                    << " NetDevice=" << m_netDevice
+                                                    << " NWK=" << (m_nwk ? "enabled" : "disabled"));
 
     Object::DoInitialize();
 }
