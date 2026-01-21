@@ -1,125 +1,79 @@
-# nishioka-stack-simple.cc の動作説明
+# nishioka-stack-simpleの動作と効果
 
 ## 概要
 
-`nishioka-stack-simple.cc`は、NishiokaStackとNishiokaStackContainerの基本的な動作を確認するための簡単なパケット送信プログラムです。2つのノード間でNishiokaHeaderを含むパケットを送受信し、スタックの動作を確認します。
+このドキュメントでは、`nishioka-stack-simple.cc`がどのようなことを行うのか、そしてモジュール全体に及ぼす効果について説明します。
 
-## プログラムの全体構造
+## 1. nishioka-stack-simpleの目的
+
+`nishioka-stack-simple.cc`は、**NishiokaStackとNishiokaNwkの基本的な動作を確認するためのシンプルなサンプルプログラム**です。
+
+### 1.1 主な目的
+
+1. **NishiokaStackの基本動作確認**: スタックのインストールと初期化
+2. **MAC層へのアクセス**: NishiokaStack経由でMAC層にアクセス
+3. **パケット送受信**: NishiokaHeaderを含むパケットの送受信
+4. **NWK層のルーティング機能**: ルーティングテーブルの設定と確認
+
+## 2. プログラムの動作フロー
+
+### 2.1 全体の流れ
 
 ```
-1. 初期化
-   ├─ ログ設定
-   ├─ ノード作成（2つ）
-   ├─ モビリティモデル設定
-   ├─ チャネル作成
-   ├─ LrWpanNetDeviceインストール
-   ├─ NishiokaStackインストール
-   └─ コールバック設定
-
-2. パケット送信スケジュール
-   └─ 1.0秒後に送信
-
-3. シミュレーション実行
-   └─ 5.0秒まで実行
-
-4. 結果表示
-   └─ 送受信統計
+1. ノード作成（2ノード）
+   ↓
+2. モビリティモデル設定
+   ↓
+3. チャネル作成と設定
+   ↓
+4. LrWpanNetDeviceのインストール
+   ↓
+5. MACアドレスとPAN IDの設定
+   ↓
+6. NishiokaStackのインストール
+   ↓
+7. NWK層でのルーティング設定
+   ↓
+8. 受信コールバック設定
+   ↓
+9. パケット送信のスケジューリング
+   ↓
+10. シミュレーション実行
 ```
 
-## 詳細な動作説明
+### 2.2 詳細な動作
 
-### 1. 初期化フェーズ
-
-#### 1.1 ログ設定
+#### ステップ1: ノードとネットワークデバイスの作成
 
 ```cpp
-LogComponentEnable("NishiokaStack", LOG_LEVEL_INFO);
-LogComponentEnable("LrWpanMac", LOG_LEVEL_INFO);
-```
-
-**動作:**
-- NishiokaStackとLrWpanMacのログを有効化
-- デバッグ情報が出力される
-
-#### 1.2 ノード作成
-
-```cpp
+// 2つのノードを作成
 NodeContainer nodes;
 nodes.Create(2);
-```
 
-**動作:**
-- 2つのノードを作成
-- Node 0: 送信ノード
-- Node 1: 受信ノード
-
-#### 1.3 モビリティモデル設定
-
-```cpp
-MobilityHelper mobility;
-mobility.SetPositionAllocator("ns3::GridPositionAllocator", ...);
-mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-mobility.Install(nodes);
-```
-
-**動作:**
-- グリッド配置でノードの位置を設定
-- Node 0: (0, 0)
-- Node 1: (10, 0)
-- 固定位置モデルを使用（移動なし）
-
-**重要:** NS-3では、ノードに位置情報が必要です。位置がないと、物理層での通信ができません。
-
-#### 1.4 チャネル作成
-
-```cpp
-Ptr<SingleModelSpectrumChannel> channel = CreateObject<SingleModelSpectrumChannel>();
-Ptr<LogDistancePropagationLossModel> propModel = CreateObject<LogDistancePropagationLossModel>();
-propModel->SetPathLossExponent(2.0);
-channel->AddPropagationLossModel(propModel);
-Ptr<ConstantSpeedPropagationDelayModel> delayModel = CreateObject<ConstantSpeedPropagationDelayModel>();
-channel->SetPropagationDelayModel(delayModel);
-```
-
-**動作:**
-- スペクトラムチャネルを作成
-- 伝播損失モデルを設定（距離に基づく損失）
-- 伝播遅延モデルを設定（一定速度）
-
-**重要:** チャネルは物理層での通信を可能にします。
-
-#### 1.5 LrWpanNetDeviceのインストール
-
-```cpp
+// LrWpanNetDeviceをインストール
 LrWpanHelper lrWpanHelper;
 NetDeviceContainer devices = lrWpanHelper.Install(nodes);
+```
 
-// アドレスとPAN IDを設定
+**効果:**
+- 2つのノードが作成される
+- 各ノードにLrWpanNetDeviceがインストールされる
+
+#### ステップ2: アドレス設定
+
+```cpp
 dev0->GetMac()->SetShortAddress(Mac16Address("00:01"));
 dev1->GetMac()->SetShortAddress(Mac16Address("00:02"));
 dev0->GetMac()->SetPanId(0xCAFE);
 dev1->GetMac()->SetPanId(0xCAFE);
-
-// チャネルを設定
-for (uint32_t i = 0; i < devices.GetN(); i++)
-{
-    Ptr<LrWpanNetDevice> dev = devices.Get(i)->GetObject<LrWpanNetDevice>();
-    dev->SetChannel(channel);
-}
 ```
 
-**動作:**
-- 各ノードにLrWpanNetDeviceをインストール
-- MACアドレスを設定（00:01, 00:02）
-- PAN IDを設定（0xCAFE）
-- チャネルを各デバイスに設定
+**効果:**
+- Node 0: MACアドレス `00:01`
+- Node 1: MACアドレス `00:02`
+- 両方のノードが同じPAN ID (`0xCAFE`) に属する
 
-**重要:** 
-- MACアドレスは通信の識別に必要
-- PAN IDは同じネットワークに属するデバイスで同じ値にする必要がある
-- チャネルを設定しないと通信できない
-
-#### 1.6 NishiokaStackのインストール
+#### ステップ3: NishiokaStackのインストール
 
 ```cpp
 Ptr<NishiokaStack> stack0 = CreateObject<NishiokaStack>();
@@ -135,38 +89,36 @@ stack0->Initialize();
 stack1->Initialize();
 ```
 
-**動作:**
-1. NishiokaStackオブジェクトを作成
-2. NetDeviceを設定（`SetNetDevice()`）
-   - これにより、スタックがNetDeviceと関連付けられる
-3. ノードにスタックを集約（`AggregateObject()`）
-   - ノードからスタックにアクセス可能になる
-4. スタックを初期化（`Initialize()`）
-   - `DoInitialize()`が呼ばれる
-   - NetDeviceからMAC層を取得
-   - 層間接続が確立される
+**効果:**
+- 各ノードにNishiokaStackがインストールされる
+- NishiokaStackが自動的にNishiokaNwkを生成
+- MAC層への接続が確立される
 
-**重要:**
-- `SetNetDevice()`は`Initialize()`の前に呼ぶ必要がある
-- `Initialize()`でMAC層へのアクセスが可能になる
-- `AggregateObject()`でノードとスタックが関連付けられる
+#### ステップ4: NWK層でのルーティング設定
 
-#### 1.7 コールバック設定
+```cpp
+Ptr<NishiokaNwk> nwk0 = stack0->GetNwk();
+
+// ルートを設定（宛先: 00:02, 次ホップ: 00:02）
+nwk0->SetRoute(Mac16Address("00:02"), Mac16Address("00:02"));
+```
+
+**効果:**
+- ルーティングテーブルにエントリが追加される
+- Node 0からNode 1への直接ルートが設定される
+
+#### ステップ5: 受信コールバック設定
 
 ```cpp
 Ptr<LrWpanMacBase> mac1 = stack1->GetMac();
 mac1->SetMcpsDataIndicationCallback(MakeCallback(&McpsIndication));
 ```
 
-**動作:**
-- 受信ノード（Node 1）のMAC層にコールバックを設定
-- パケット受信時に`McpsIndication()`が呼ばれる
+**効果:**
+- Node 1でパケット受信時に`McpsIndication()`が呼び出される
+- NishiokaHeaderが抽出され、情報が表示される
 
-**重要:** コールバックを設定しないと、受信したパケットを処理できません。
-
-### 2. パケット送信フェーズ
-
-#### 2.1 送信スケジュール
+#### ステップ6: パケット送信
 
 ```cpp
 Simulator::ScheduleWithContext(nodes.Get(0)->GetId(),
@@ -176,93 +128,46 @@ Simulator::ScheduleWithContext(nodes.Get(0)->GetId(),
                                Mac16Address("00:02"));
 ```
 
-**動作:**
-- 1.0秒後に`SendPacket()`を実行
-- Node 0のコンテキストで実行
-- 宛先アドレスは00:02（Node 1）
-
-#### 2.2 SendPacket()関数の動作
-
+**SendPacket()関数の動作:**
 ```cpp
-static void
-SendPacket(Ptr<NishiokaStack> stack, Mac16Address dstAddr)
+static void SendPacket(Ptr<NishiokaStack> stack, Mac16Address dstAddr)
 {
     // 1. NishiokaHelperでパケットを作成
     NishiokaHelper helper;
     Ptr<Packet> packet = helper.CreatePacket(
         "Hello from NishiokaStack!",  // データ
-        Mac16Address("00:01"),        // 送信元アドレス
-        dstAddr,                       // 宛先アドレス
+        Mac16Address("00:01"),        // 送信元
+        dstAddr,                       // 宛先
         0xCAFE,                       // PAN ID
-        85,                           // バッテリー残量（85%）
+        85,                           // バッテリー残量
         200,                          // LQI
         0,                            // ホップ数
         1                             // シーケンス番号
     );
 
-    // 2. MAC層を取得
+    // 2. NishiokaStack経由でMAC層を取得
     Ptr<LrWpanMacBase> mac = stack->GetMac();
 
-    // 3. MCPS-DATA.requestパラメータを設定
+    // 3. MAC層でパケット送信
     McpsDataRequestParams params;
     params.m_dstPanId = 0xCAFE;
     params.m_dstAddrMode = SHORT_ADDR;
     params.m_dstAddr = dstAddr;
-    params.m_msduHandle = 0;
-    params.m_txOptions = TX_OPTION_NONE;
-
-    // 4. MAC層を通じてパケットを送信
     mac->McpsDataRequest(params, packet);
 }
 ```
 
-**動作の流れ:**
+**効果:**
+- NishiokaHeaderを含むパケットが作成される
+- MAC層経由でパケットが送信される
+- 物理層を通じてNode 1に到達する
 
-1. **パケット作成**
-   - NishiokaHelperを使用してNishiokaHeaderを含むパケットを作成
-   - データ、アドレス、バッテリー、LQI、ホップ数などの情報を設定
-
-2. **MAC層へのアクセス**
-   - `stack->GetMac()`でMAC層を取得
-   - NishiokaStackがNetDeviceから取得したMAC層へのポインタを返す
-
-3. **送信パラメータ設定**
-   - 宛先PAN ID、アドレスモード、宛先アドレスなどを設定
-
-4. **パケット送信**
-   - `mac->McpsDataRequest()`でMAC層を通じてパケットを送信
-   - MAC層が物理層にパケットを渡す
-
-**重要:**
-- NishiokaStackを通じてMAC層にアクセスできる
-- NishiokaHelperでパケット作成が簡単になる
-- MAC層のAPI（`McpsDataRequest()`）を使用して送信
-
-### 3. パケット受信フェーズ
-
-#### 3.1 受信フロー
-
-```
-物理層（PHY）
-    ↓
-MAC層（LrWpanMacBase）
-    ↓
-McpsDataIndicationCallback
-    ↓
-McpsIndication()関数
-    ↓
-NishiokaHeader抽出
-    ↓
-情報表示
-```
-
-#### 3.2 McpsIndication()関数の動作
+#### ステップ7: パケット受信
 
 ```cpp
-static void
-McpsIndication(const McpsDataIndicationParams params, Ptr<Packet> p)
+static void McpsIndication(const McpsDataIndicationParams params, Ptr<Packet> p)
 {
-    // 1. 受信情報を表示
+    // 1. パケット情報を表示
     std::cout << "Source: " << params.m_srcAddr << "\n";
     std::cout << "Destination: " << params.m_dstAddr << "\n";
 
@@ -270,262 +175,227 @@ McpsIndication(const McpsDataIndicationParams params, Ptr<Packet> p)
     NishiokaHelper helper;
     NishiokaHeader header;
     std::string data;
+    helper.ExtractHeader(p, header, data);
 
-    if (helper.ExtractHeader(p, header, data))
-    {
-        // 3. ルーティング情報を抽出
-        uint8_t battery, lqi, hops;
-        helper.ExtractRoutingInfo(header, battery, lqi, hops);
+    // 3. ルーティング情報を抽出
+    uint8_t battery, lqi, hops;
+    helper.ExtractRoutingInfo(header, battery, lqi, hops);
 
-        // 4. 情報を表示
-        std::cout << "Battery: " << (int)battery << "%\n";
-        std::cout << "LQI: " << (int)lqi << "\n";
-        std::cout << "Hops: " << (int)hops << "\n";
-        std::cout << "Payload: \"" << data << "\"\n";
-    }
+    // 4. 情報を表示
+    std::cout << "Battery: " << (int)battery << "%\n";
+    std::cout << "LQI: " << (int)lqi << "\n";
+    std::cout << "Hops: " << (int)hops << "\n";
+    std::cout << "Payload: \"" << data << "\"\n";
 }
 ```
 
-**動作:**
-1. MAC層から受信パラメータとパケットを受け取る
-2. NishiokaHelperを使用してNishiokaHeaderを抽出
-3. ルーティング情報（バッテリー、LQI、ホップ数）を抽出
-4. 情報を表示
+**効果:**
+- パケットが受信される
+- NishiokaHeaderから情報が抽出される
+- ルーティング情報（バッテリー、LQI、ホップ数）が表示される
 
-**重要:**
-- MAC層のコールバックでパケットを受信
-- NishiokaHelperでヘッダ抽出が簡単になる
-- ルーティング情報が正しく抽出できる
+## 3. モジュール全体に及ぼす効果
 
-### 4. シミュレーション実行
+### 3.1 プロトコルスタックの動作確認
 
-```cpp
-Simulator::Stop(Seconds(5.0));
-Simulator::Run();
-Simulator::Destroy();
-```
-
-**動作:**
-- 5.0秒までシミュレーションを実行
-- すべてのイベントを処理
-- シミュレーション終了後にリソースを解放
-
-### 5. 結果表示
-
-```cpp
-std::cout << "Packets sent: " << g_txCount << std::endl;
-std::cout << "Packets received: " << g_rxCount << std::endl;
-std::cout << "Success rate: " << (g_rxCount * 100.0 / g_txCount) << "%" << std::endl;
-```
-
-**動作:**
-- 送信パケット数、受信パケット数、成功率を表示
-
-## 重要なポイント
-
-### 1. NishiokaStackの役割
-
-**NishiokaStackは、NetDeviceとMAC層へのアクセスを提供するラッパークラスです。**
-
-- **NetDeviceへのアクセス**: `SetNetDevice()`でNetDeviceを設定
-- **MAC層へのアクセス**: `GetMac()`でMAC層を取得
-- **層間接続の確立**: `Initialize()`でMAC層への接続を確立
-
-**使用例:**
-```cpp
-Ptr<NishiokaStack> stack = CreateObject<NishiokaStack>();
-stack->SetNetDevice(device);  // NetDeviceを設定
-stack->Initialize();          // 初期化（MAC層への接続を確立）
-Ptr<LrWpanMacBase> mac = stack->GetMac();  // MAC層にアクセス
-```
-
-### 2. 層間接続の流れ
+#### 層間接続の確認
 
 ```
+アプリケーション層（nishioka-stack-simple.cc）
+    ↓ SendPacket()
 NishiokaStack
-    ↓ SetNetDevice()
-NetDevice (LrWpanNetDevice)
-    ↓ GetObject<LrWpanMacBase>()
-MAC層 (LrWpanMacBase)
+    ↓ GetMac()
+MAC層（LrWpanMacBase）
     ↓ McpsDataRequest()
-物理層 (PHY)
-    ↓
+NetDevice（LrWpanNetDevice）
+    ↓ 物理層
 チャネル
+    ↓ 伝送
+Node 1
+    ↓ 受信
+MAC層
+    ↓ McpsDataIndicationCallback
+アプリケーション層（McpsIndication）
 ```
 
-**重要:**
-- NishiokaStackはNetDeviceを通じてMAC層にアクセス
-- `GetObject<>()`でMAC層を取得（NS-3のオブジェクト集約システム）
-- MAC層のAPIを使用してパケットを送受信
+**効果:**
+- プロトコルスタック全体が正しく動作することを確認
+- 層間の接続が適切に確立されていることを確認
 
-### 3. パケット送信の流れ
+### 3.2 NishiokaHelperの動作確認
 
-```
-アプリケーション
-    ↓
-NishiokaHelper::CreatePacket()  // パケット作成
-    ↓
-NishiokaStack::GetMac()  // MAC層取得
-    ↓
-LrWpanMacBase::McpsDataRequest()  // 送信
-    ↓
-物理層 → チャネル → 受信ノード
-```
-
-**重要:**
-- NishiokaHelperでパケット作成が簡単
-- NishiokaStackでMAC層にアクセス
-- MAC層の標準APIを使用
-
-### 4. パケット受信の流れ
-
-```
-チャネル
-    ↓
-物理層 → MAC層
-    ↓
-McpsDataIndicationCallback  // コールバック
-    ↓
-McpsIndication()関数
-    ↓
-NishiokaHelper::ExtractHeader()  // ヘッダ抽出
-    ↓
-アプリケーション処理
-```
-
-**重要:**
-- MAC層のコールバックで受信を処理
-- NishiokaHelperでヘッダ抽出が簡単
-- コールバックを設定しないと受信できない
-
-### 5. NishiokaStackContainerの使用（将来の拡張）
-
-現在のプログラムでは直接使用していませんが、複数のスタックを管理する場合に使用します：
+#### パケット作成と抽出
 
 ```cpp
-NishiokaStackContainer container;
-container.Add(stack0);
-container.Add(stack1);
+// パケット作成
+NishiokaHelper helper;
+Ptr<Packet> packet = helper.CreatePacket(
+    "Hello from NishiokaStack!",
+    Mac16Address("00:01"),
+    Mac16Address("00:02"),
+    0xCAFE, 85, 200, 0, 1
+);
 
-// すべてのスタックにアクセス
-for (uint32_t i = 0; i < container.GetN(); i++)
-{
-    Ptr<NishiokaStack> stack = container.Get(i);
-    // 処理
+// パケット抽出
+NishiokaHeader header;
+std::string data;
+helper.ExtractHeader(packet, header, data);
+```
+
+**効果:**
+- NishiokaHelperが正しく動作することを確認
+- NishiokaHeaderの作成と抽出が正しく行われることを確認
+
+### 3.3 NishiokaNwkのルーティング機能確認
+
+#### ルーティングテーブルの操作
+
+```cpp
+Ptr<NishiokaNwk> nwk = stack->GetNwk();
+
+// ルート設定
+nwk->SetRoute(Mac16Address("00:02"), Mac16Address("00:02"));
+
+// ルート確認
+uint32_t count = nwk->GetRouteCount();
+```
+
+**効果:**
+- NWK層のルーティング機能が正しく動作することを確認
+- ルーティングテーブルが正しく管理されることを確認
+
+### 3.4 開発・デバッグの支援
+
+#### 動作確認の容易さ
+
+1. **シンプルな構成**: 2ノードのみのシンプルな構成
+2. **明確な動作**: 送信→受信の流れが明確
+3. **詳細なログ**: 各ステップで詳細な情報を出力
+
+**効果:**
+- 新機能の動作確認が容易
+- バグの特定が容易
+- モジュールの理解が深まる
+
+### 3.5 教育・学習ツールとしての効果
+
+#### モジュールの理解促進
+
+1. **実装例の提供**: 実際の使用方法を示す
+2. **ベストプラクティス**: 推奨される使用方法を示す
+3. **動作の可視化**: ログ出力で動作を可視化
+
+**効果:**
+- 新しい開発者がモジュールを理解しやすい
+- 使用方法が明確になる
+- トラブルシューティングの参考になる
+
+## 4. 実際の出力例
+
+### 4.1 実行時の出力
+
+```
+=== NishiokaStack Simple Example ===
+
+Created 2 nodes
+
+Installed mobility models
+
+Created channel
+
+Installed LrWpanNetDevices
+  Node 0: Address 00:01
+  Node 1: Address 00:02
+
+Installed NishiokaStack on both nodes
+
+Set route in NWK layer: Node 0 -> Node 1 (direct)
+Routing table size: 1 routes
+
+Set up data indication callback
+
+Scheduled packet transmission at 1.0 seconds
+
+Starting simulation...
+
+1s [TX] Sending packet to 00:02
+  Packet sent successfully
+
+1.0001s [RX] Node received packet:
+  Source: 00:01
+  Destination: 00:02
+  Battery: 85%
+  LQI: 200
+  Hops: 0
+  Payload: "Hello from NishiokaStack!"
+
+=== Simulation Results ===
+Packets sent: 1
+Packets received: 1
+Success rate: 100%
+```
+
+### 4.2 出力の意味
+
+- **TX**: パケット送信
+- **RX**: パケット受信
+- **Battery**: バッテリー残量（85%）
+- **LQI**: リンク品質指標（200）
+- **Hops**: ホップ数（0 = 直接通信）
+- **Payload**: パケットのペイロードデータ
+
+## 5. 拡張可能性
+
+### 5.1 マルチホップ通信の確認
+
+現在の実装は直接通信ですが、以下のように拡張できます：
+
+```cpp
+// 3ノード構成でマルチホップ通信
+// Node 0 -> Node 1 -> Node 2
+
+// Node 0からNode 2へのルート（Node 1経由）
+nwk0->SetRoute(Mac16Address("00:03"), Mac16Address("00:02"));
+
+// Node 1からNode 2へのルート（直接）
+nwk1->SetRoute(Mac16Address("00:03"), Mac16Address("00:03"));
+```
+
+### 5.2 ルーティングアルゴリズムのテスト
+
+```cpp
+// 複数のルートを設定して最適経路を選択
+nwk->SetRoute(Mac16Address("00:03"), Mac16Address("00:02")); // 経路1
+nwk->SetRoute(Mac16Address("00:03"), Mac16Address("00:04")); // 経路2（上書き）
+
+// 最適経路を取得
+Mac16Address nextHop;
+if (nwk->GetNextHop(Mac16Address("00:03"), nextHop)) {
+    // nextHop = 00:04（最新の設定）
 }
 ```
 
-## 実行時の動作フロー
+## 6. まとめ
 
-### タイムライン
+### 6.1 nishioka-stack-simpleの役割
 
-```
-t=0.0s: シミュレーション開始
-    ├─ ノード作成
-    ├─ デバイスインストール
-    ├─ スタックインストール
-    └─ コールバック設定
+1. **動作確認**: NishiokaStackとNishiokaNwkの基本動作を確認
+2. **統合テスト**: プロトコルスタック全体の統合をテスト
+3. **使用例の提供**: 実際の使用方法を示す
+4. **デバッグ支援**: 問題の特定と解決を支援
 
-t=1.0s: パケット送信
-    ├─ SendPacket()実行
-    ├─ パケット作成（NishiokaHelper）
-    ├─ MAC層に送信
-    └─ 物理層経由で送信
+### 6.2 モジュール全体への効果
 
-t=1.0s+α: パケット受信
-    ├─ 物理層で受信
-    ├─ MAC層で処理
-    ├─ McpsIndication()呼び出し
-    ├─ NishiokaHeader抽出
-    └─ 情報表示
+1. **品質保証**: モジュールが正しく動作することを保証
+2. **開発効率**: 新機能の動作確認を容易にする
+3. **理解促進**: モジュールの使用方法を明確にする
+4. **教育効果**: 新しい開発者の学習を支援
 
-t=5.0s: シミュレーション終了
-    └─ 統計表示
-```
+### 6.3 重要なポイント
 
-## 重要な概念
+- **シンプルな構成**: 2ノードのみで動作確認が可能
+- **明確な動作**: 送信→受信の流れが明確
+- **詳細なログ**: 各ステップで詳細な情報を出力
+- **拡張可能**: マルチホップ通信などに拡張可能
 
-### 1. オブジェクト集約（AggregateObject）
-
-```cpp
-nodes.Get(0)->AggregateObject(stack0);
-```
-
-**意味:**
-- ノードとスタックを関連付け
-- `GetObject<NishiokaStack>()`でスタックにアクセス可能に
-- NS-3の標準的なパターン
-
-### 2. スマートポインタ（Ptr<>）
-
-```cpp
-Ptr<NishiokaStack> stack = CreateObject<NishiokaStack>();
-```
-
-**意味:**
-- 参照カウント方式のメモリ管理
-- 自動的にメモリが解放される
-- NS-3の標準的なメモリ管理
-
-### 3. コールバック（Callback）
-
-```cpp
-mac1->SetMcpsDataIndicationCallback(MakeCallback(&McpsIndication));
-```
-
-**意味:**
-- 非同期イベントの処理
-- MAC層からアプリケーションへの通知
-- NS-3の標準的なイベント処理パターン
-
-### 4. イベントスケジューリング
-
-```cpp
-Simulator::ScheduleWithContext(..., Seconds(1.0), &SendPacket, ...);
-```
-
-**意味:**
-- 将来の時刻にイベントをスケジュール
-- シミュレーション時間の管理
-- NS-3のコア機能
-
-## まとめ
-
-### プログラムの目的
-
-1. **NishiokaStackの基本動作確認**
-   - NetDeviceとの関連付け
-   - MAC層へのアクセス
-   - 層間接続の確立
-
-2. **パケット送受信の確認**
-   - NishiokaHelperを使用したパケット作成
-   - MAC層を通じた送信
-   - コールバックによる受信処理
-
-3. **NishiokaStackContainerの準備**
-   - 複数のスタックを管理する準備
-   - 将来の拡張への対応
-
-### 重要なポイント
-
-1. **NishiokaStackはラッパークラス**
-   - NetDeviceとMAC層へのアクセスを提供
-   - 層間接続を簡潔に
-
-2. **NishiokaHelperでパケット操作が簡単**
-   - パケット作成とヘッダ抽出を簡潔に
-
-3. **MAC層のコールバックで受信処理**
-   - 非同期イベントの処理
-   - 標準的なNS-3パターン
-
-4. **初期化の順序が重要**
-   - `SetNetDevice()` → `AggregateObject()` → `Initialize()`
-   - この順序で実行する必要がある
-
-5. **位置情報が必要**
-   - モビリティモデルを設定しないと通信できない
-
-このプログラムにより、NishiokaStackとNishiokaStackContainerの基本的な動作を理解できます。
-
+このサンプルプログラムにより、NishiokaStackとNishiokaNwkの動作を確認し、モジュール全体の品質を保証できます。

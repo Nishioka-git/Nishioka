@@ -459,3 +459,4 @@ static void DataIndication(Ptr<NishiokaStack> stack,
 
 この構造により、multihop2はNishiokaStackとNishiokaStackContainerを使用して、統一的なインターフェースでMAC層にアクセスし、パケット送受信を行っています。
 
+

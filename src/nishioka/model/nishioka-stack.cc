@@ -8,6 +8,7 @@
  */
 
 #include "nishioka-stack.h"
+#include "nishioka-nwk.h"
 
 #include "ns3/channel.h"
 #include "ns3/log.h"
@@ -38,8 +39,11 @@ NishiokaStack::GetTypeId()
 }
 
 NishiokaStack::NishiokaStack()
+    : m_nwk(nullptr)
 {
     NS_LOG_FUNCTION(this);
+    // Create NWK layer by default
+    m_nwk = CreateObject<NishiokaNwk>();
 }
 
 NishiokaStack::~NishiokaStack()
@@ -55,6 +59,7 @@ NishiokaStack::DoDispose()
     m_netDevice = nullptr;
     m_node = nullptr;
     m_mac = nullptr;
+    m_nwk = nullptr;
     Object::DoDispose();
 }
 
@@ -74,6 +79,14 @@ NishiokaStack::DoInitialize()
     m_mac = m_netDevice->GetObject<LrWpanMacBase>();
     NS_ABORT_MSG_UNLESS(m_mac,
                         "No valid LrWpanMacBase found in this NetDevice, cannot use NishiokaStack");
+
+    // Aggregate NWK layer to the node
+    if (m_nwk)
+    {
+        m_node->AggregateObject(m_nwk);
+        m_nwk->SetMac(m_mac);
+        NS_LOG_INFO("NishiokaNwk aggregated to node " << m_node->GetId());
+    }
 
     NS_LOG_INFO("NishiokaStack initialized: Node=" << m_node->GetId()
                                                     << " NetDevice=" << m_netDevice);
@@ -111,6 +124,19 @@ Ptr<LrWpanMacBase>
 NishiokaStack::GetMac() const
 {
     return m_mac;
+}
+
+Ptr<NishiokaNwk>
+NishiokaStack::GetNwk() const
+{
+    return m_nwk;
+}
+
+void
+NishiokaStack::SetNwk(Ptr<NishiokaNwk> nwk)
+{
+    NS_LOG_FUNCTION(this << nwk);
+    m_nwk = nwk;
 }
 
 } // namespace nishioka

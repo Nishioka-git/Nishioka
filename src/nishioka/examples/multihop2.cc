@@ -20,6 +20,7 @@
 #include "ns3/nishioka-header.h"
 #include "ns3/nishioka-stack.h"
 #include "ns3/nishioka-stack-container.h"
+#include "ns3/nishioka-helper.h"
 
 #include <iostream>
 #include <map>
@@ -1203,50 +1204,32 @@ std::cout << "Total devices in PAN: " << g_totalDevicesInPAN << std::endl;
 std::cout << " - Coordinator: 1\n";
 std::cout << " - End Devices: " << (g_totalDevicesInPAN - 1) << std::endl;
 std::cout << "==========================================\n\n";
-// Coordinator
-Ptr<Node> node = CreateObject<Node>();
+
+// Create NetDevices
 g_coordinatorDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB0");
-node->AddDevice(g_coordinatorDevice);
-Ptr<ConstantPositionMobilityModel> mobility0 = CreateObject<ConstantPositionMobilityModel>();
-mobility0->SetPosition(Vector(0, 0, 0));
-node->AggregateObject(mobility0);
-
-// Create and install NishiokaStack for coordinator
-g_coordinatorStack = CreateObject<NishiokaStack>();
-g_coordinatorStack->SetNetDevice(g_coordinatorDevice);
-node->AggregateObject(g_coordinatorStack);
-g_coordinatorStack->Initialize();
-g_stacks.Add(g_coordinatorStack);
-
-// End Device 1 (dev01)
-Ptr<Node> node2 = CreateObject<Node>();
 g_uartNetDevice1 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB1");
-node2->AddDevice(g_uartNetDevice1);
-Ptr<ConstantPositionMobilityModel> mobility1 = CreateObject<ConstantPositionMobilityModel>();
-mobility1->SetPosition(Vector(0, 90, 0));
-node2->AggregateObject(mobility1);
-
-// Create and install NishiokaStack for dev01
-g_dev01Stack = CreateObject<NishiokaStack>();
-g_dev01Stack->SetNetDevice(g_uartNetDevice1);
-node2->AggregateObject(g_dev01Stack);
-g_dev01Stack->Initialize();
-g_stacks.Add(g_dev01Stack);
-
-// End Device 2 (dev02)
-Ptr<Node> node3 = CreateObject<Node>();
 g_uartNetDevice2 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB2");
-node3->AddDevice(g_uartNetDevice2);
-Ptr<ConstantPositionMobilityModel> mobility2 = CreateObject<ConstantPositionMobilityModel>();
-mobility2->SetPosition(Vector(0, 180, 0));
-node3->AggregateObject(mobility2);
 
-// Create and install NishiokaStack for dev02
-g_dev02Stack = CreateObject<NishiokaStack>();
-g_dev02Stack->SetNetDevice(g_uartNetDevice2);
-node3->AggregateObject(g_dev02Stack);
-g_dev02Stack->Initialize();
-g_stacks.Add(g_dev02Stack);
+// Create NetDeviceContainer
+NetDeviceContainer netDevices;
+netDevices.Add(g_coordinatorDevice);
+netDevices.Add(g_uartNetDevice1);
+netDevices.Add(g_uartNetDevice2);
+
+// Define positions for each device
+std::vector<Vector> positions;
+positions.push_back(Vector(0, 0, 0));    // Coordinator
+positions.push_back(Vector(0, 90, 0));   // Dev01
+positions.push_back(Vector(0, 180, 0));   // Dev02
+
+// Use NishiokaHelper to install stacks
+NishiokaHelper helper;
+g_stacks = helper.Install(netDevices, positions);
+
+// Get stacks from container
+g_coordinatorStack = g_stacks.Get(0);
+g_dev01Stack = g_stacks.Get(1);
+g_dev02Stack = g_stacks.Get(2);
 
 // コールバック設定（NishiokaStack経由）
 g_coordinatorStack->GetMac()->SetMcpsDataConfirmCallback(

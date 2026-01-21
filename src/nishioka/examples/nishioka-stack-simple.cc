@@ -19,6 +19,7 @@
 #include "ns3/nishioka-header.h"
 #include "ns3/nishioka-helper.h"
 #include "ns3/nishioka-stack.h"
+#include "ns3/nishioka-nwk.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
 
@@ -191,6 +192,21 @@ main(int argc, char* argv[])
     stack1->Initialize();
 
     std::cout << "Installed NishiokaStack on both nodes\n" << std::endl;
+
+    // Set up routing in NWK layer (example: if node 0 wants to send to node 1 via node 2)
+    // For this simple example, we set direct routes
+    Ptr<NishiokaNwk> nwk0 = stack0->GetNwk();
+    Ptr<NishiokaNwk> nwk1 = stack1->GetNwk();
+
+    // Set direct route from node 0 to node 1
+    nwk0->SetRoute(Mac16Address("00:02"), Mac16Address("00:02"));
+    std::cout << "Set route in NWK layer: Node 0 -> Node 1 (direct)" << std::endl;
+
+    // Example: If there was a node 2 (00:03), you could set:
+    // nwk0->SetRoute(Mac16Address("00:03"), Mac16Address("00:02")); // Route to 00:03 via 00:02
+    // nwk0->SetRoute(Mac16Address("00:01"), Mac16Address("00:01")); // Route to self
+
+    std::cout << "Routing table size: " << nwk0->GetRouteCount() << " routes\n" << std::endl;
 
     // Set up data indication callback on receiver (MAC layer callback)
     Ptr<LrWpanMacBase> mac1 = stack1->GetMac();

@@ -11,6 +11,10 @@
 
 #include "ns3/log.h"
 #include "ns3/packet.h"
+#include "ns3/node.h"
+#include "ns3/net-device.h"
+#include "ns3/nishioka-stack.h"
+#include "ns3/constant-position-mobility-model.h"
 
 namespace ns3
 {
@@ -21,6 +25,7 @@ NishiokaHelper::NishiokaHelper()
     : m_seqNumCounter(0)
 {
     NS_LOG_FUNCTION(this);
+    m_stackFactory.SetTypeId("ns3::nishioka::NishiokaStack");
 }
 
 Ptr<Packet>
@@ -219,5 +224,88 @@ NishiokaHelper::ResetSeqNum()
     m_seqNumCounter = 0;
 }
 
+nishioka::NishiokaStackContainer
+NishiokaHelper::Install(NetDeviceContainer netDevices, const std::vector<Vector>& positions)
+{
+    NS_LOG_FUNCTION(this);
+
+    nishioka::NishiokaStackContainer stackContainer;
+    NodeContainer nodes;
+
+    // Create nodes for each device
+    for (uint32_t i = 0; i < netDevices.GetN(); ++i)
+    {
+        Ptr<Node> node = CreateObject<Node>();
+        nodes.Add(node);
+    }
+
+    // Install stacks
+    return Install(netDevices, positions, nodes);
+}
+
+nishioka::NishiokaStackContainer
+NishiokaHelper::Install(NetDeviceContainer netDevices,
+                        const std::vector<Vector>& positions,
+                        NodeContainer nodes)
+{
+    NS_LOG_FUNCTION(this);
+
+    nishioka::NishiokaStackContainer stackContainer;
+
+    NS_ASSERT_MSG(netDevices.GetN() == nodes.GetN(),
+                  "Number of devices must match number of nodes");
+
+    if (!positions.empty())
+    {
+        NS_ASSERT_MSG(positions.size() == netDevices.GetN(),
+                      "Number of positions must match number of devices");
+    }
+
+    for (uint32_t i = 0; i < netDevices.GetN(); ++i)
+    {
+        Ptr<NetDevice> device = netDevices.Get(i);
+        Ptr<Node> node = nodes.Get(i);
+
+        NS_ASSERT_MSG(device, "NetDevice not found at index " << i);
+        NS_ASSERT_MSG(node, "Node not found at index " << i);
+
+        NS_LOG_LOGIC("Installing NishiokaStack on node " << node->GetId());
+
+        // Add device to node if not already added
+        if (device->GetNode() != node)
+        {
+            node->AddDevice(device);
+        }
+
+        // Set up mobility model if position is provided
+        if (!positions.empty() && i < positions.size())
+        {
+            Ptr<ConstantPositionMobilityModel> mobility =
+                CreateObject<ConstantPositionMobilityModel>();
+            mobility->SetPosition(positions[i]);
+            node->AggregateObject(mobility);
+            NS_LOG_LOGIC("Set mobility model for node " << node->GetId()
+                                                         << " at position " << positions[i]);
+        }
+
+        // Create and install NishiokaStack
+        Ptr<nishioka::NishiokaStack> stack = m_stackFactory.Create<nishioka::NishiokaStack>();
+        stackContainer.Add(stack);
+        node->AggregateObject(stack);
+        stack->SetNetDevice(device);
+        // Note: Initialize() is called automatically by ns-3 when the simulation starts
+    }
+
+    return stackContainer;
+}
+
+void
+NishiokaHelper::SetStackAttribute(std::string n1, const AttributeValue& v1)
+{
+    NS_LOG_FUNCTION(this << n1);
+    m_stackFactory.Set(n1, v1);
+}
+
 } // namespace ns3
+
 

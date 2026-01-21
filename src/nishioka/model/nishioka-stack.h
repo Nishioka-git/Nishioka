@@ -24,6 +24,8 @@ class Node;
 namespace nishioka
 {
 
+class NishiokaNwk;
+
 /**
  * @ingroup nishioka
  *
@@ -86,6 +88,20 @@ class NishiokaStack : public Object
      */
     Ptr<lrwpan::LrWpanMacBase> GetMac() const;
 
+    /**
+     * Get the NWK layer used by this NishiokaStack.
+     *
+     * @return the NWK object
+     */
+    Ptr<NishiokaNwk> GetNwk() const;
+
+    /**
+     * Set the NWK layer used by this NishiokaStack.
+     *
+     * @param nwk The NWK layer object
+     */
+    void SetNwk(Ptr<NishiokaNwk> nwk);
+
   protected:
     /**
      * Dispose of the Objects used by the NishiokaStack
@@ -99,6 +115,7 @@ class NishiokaStack : public Object
 
   private:
     Ptr<lrwpan::LrWpanMacBase> m_mac;     //!< The underlying LrWpan MAC connected to this Stack
+    Ptr<NishiokaNwk> m_nwk;               //!< The Nishioka Network layer
     Ptr<Node> m_node;                     //!< The node associated with this NetDevice
     Ptr<NetDevice> m_netDevice;           //!< Smart pointer to the underlying NetDevice
 };

@@ -4,12 +4,14 @@ build_lib(
     model/nishioka-header.cc
     model/data-payload-header.cc
     model/nishioka-stack.cc
+    model/nishioka-nwk.cc
     helper/nishioka-helper.cc
     helper/nishioka-stack-container.cc
   HEADER_FILES
     model/nishioka-header.h
     model/data-payload-header.h
     model/nishioka-stack.h
+    model/nishioka-nwk.h
     helper/nishioka-helper.h
     helper/nishioka-stack-container.h
   LIBRARIES_TO_LINK

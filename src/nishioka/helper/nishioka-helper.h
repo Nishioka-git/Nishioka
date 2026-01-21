@@ -11,9 +11,14 @@
 #define NISHIOKA_HELPER_H
 
 #include "ns3/nishioka-header.h"
+#include "ns3/nishioka-stack-container.h"
+#include "ns3/net-device-container.h"
+#include "ns3/node-container.h"
+#include "ns3/object-factory.h"
 #include "ns3/packet.h"
 #include "ns3/mac16-address.h"
 #include "ns3/mac64-address.h"
+#include "ns3/vector.h"
 
 namespace ns3
 {
@@ -22,12 +27,14 @@ namespace ns3
  * @ingroup nishioka
  *
  * @brief Helper class for creating and managing NishiokaHeader in packets
+ * and installing NishiokaStack on nodes
  *
  * This helper class provides convenient methods for:
  * - Creating packets with NishiokaHeader
  * - Extracting NishiokaHeader from packets
  * - Setting routing information (battery, LQI, hops) in headers
  * - Managing packet creation for multi-hop routing scenarios
+ * - Installing NishiokaStack on nodes with automatic setup
  */
 class NishiokaHelper
 {
@@ -133,11 +140,48 @@ class NishiokaHelper
      */
     void ResetSeqNum();
 
+    /**
+     * Install NishiokaStack on top of existing NetDevices.
+     *
+     * This function creates nodes, installs NetDevices, sets up mobility models,
+     * and installs NishiokaStack for each device in the container.
+     *
+     * @param netDevices Container of NetDevices (e.g., UartLrWpanNetDevice)
+     * @param positions Vector of positions for each device (must match device count)
+     * @return Container with the newly created NishiokaStacks
+     */
+    nishioka::NishiokaStackContainer Install(NetDeviceContainer netDevices,
+                                              const std::vector<Vector>& positions);
+
+    /**
+     * Install NishiokaStack on top of existing NetDevices with nodes.
+     *
+     * This function installs NishiokaStack on devices that are already
+     * attached to nodes. Mobility models are set up if positions are provided.
+     *
+     * @param netDevices Container of NetDevices already attached to nodes
+     * @param positions Vector of positions for each device (optional, can be empty)
+     * @return Container with the newly created NishiokaStacks
+     */
+    nishioka::NishiokaStackContainer Install(NetDeviceContainer netDevices,
+                                              const std::vector<Vector>& positions,
+                                              NodeContainer nodes);
+
+    /**
+     * Set an attribute on each NishiokaStack created by Install.
+     *
+     * @param n1 The name of the attribute to set.
+     * @param v1 The value of the attribute to set.
+     */
+    void SetStackAttribute(std::string n1, const AttributeValue& v1);
+
   private:
     uint8_t m_seqNumCounter; //!< Sequence number counter
+    ObjectFactory m_stackFactory; //!< NishiokaStack object factory
 };
 
 } // namespace ns3
 
 #endif /* NISHIOKA_HELPER_H */
+
 
