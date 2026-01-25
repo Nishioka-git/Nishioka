@@ -219,15 +219,6 @@ return GetBatteryLevel(device);
 return 100; // デフォルト値
 }
 
-// スタックからNWK層を取得するヘルパー関数
-static Ptr<NishiokaNwk> GetNwkFromStack(Ptr<NishiokaStack> stack)
-{
-if (stack) {
-return stack->GetNwk();
-}
-return nullptr;
-}
-
 // デバイスからスタックを取得するヘルパー関数
 static Ptr<NishiokaStack> GetStackFromDevice(Ptr<UartLrWpanNetDevice> device)
 {
@@ -902,9 +893,27 @@ return;
 }
 
 // 自分が中継ノードの場合、RREPを転送
+// まずNWK層のルーティングテーブルを参照
+Ptr<NishiokaNwk> nwk = stack->GetNwk();
+Mac16Address nextHop;
+bool routeFound = false;
+
+if (nwk && nwk->GetNextHop(rrep.originator, nextHop)) {
+// NWK層からルートが見つかった
+std::cout << "  [ROUTING] Route to originator found via NWK layer - NextHop: " << nextHop << std::endl;
+routeFound = true;
+} else {
+// フォールバック: アプリケーション層のルーティングテーブルを参照
 std::map<Mac16Address, RoutingEntry>& myRoutingTable = GetRoutingTable(device);
 auto it = myRoutingTable.find(rrep.originator);
 if (it != myRoutingTable.end()) {
+nextHop = it->second.nextHop;
+routeFound = true;
+std::cout << "  [ROUTING] Route to originator found via application layer - NextHop: " << nextHop << std::endl;
+}
+}
+
+if (routeFound) {
 std::cout << "  [INFO] Forwarding RREP to originator" << std::endl;
 
 RREPPacket forwardRrep = rrep;
@@ -917,7 +926,7 @@ Ptr<Packet> packet = CreateRREPPacket(forwardRrep);
 McpsDataRequestParams forwardParams;
 forwardParams.m_dstPanId = 0xCAFE;
 forwardParams.m_dstAddrMode = SHORT_ADDR;
-forwardParams.m_dstAddr = it->second.nextHop; // RREQの送信元への次ホップ
+forwardParams.m_dstAddr = nextHop; // NWK層またはアプリケーション層から取得したnextHop
 forwardParams.m_msduHandle = 2;
 forwardParams.m_txOptions = 0;
 forwardParams.m_srcAddrMode = SHORT_ADDR;
