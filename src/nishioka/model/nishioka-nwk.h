@@ -12,8 +12,10 @@
 
 #include "ns3/lr-wpan-mac-base.h"
 #include "ns3/mac16-address.h"
+#include "ns3/mac64-address.h"
 #include "ns3/object.h"
 #include "ns3/packet.h"
+#include "ns3/traced-callback.h"
 
 #include <map>
 
@@ -101,6 +103,81 @@ class NishiokaNwk : public Object
      */
     uint32_t GetRouteCount() const;
 
+    /**
+     * Get the extended address obtained from the MAC layer.
+     *
+     * @return The IEEE extended address
+     */
+    Mac64Address GetExtendedAddress() const;
+
+    /**
+     * MCPS-DATA.indication handler (invoked by the MAC layer).
+     */
+    virtual void McpsDataIndication(lrwpan::McpsDataIndicationParams params, Ptr<Packet> msdu);
+
+    /**
+     * MCPS-DATA.confirm handler (invoked by the MAC layer).
+     */
+    void McpsDataConfirm(lrwpan::McpsDataConfirmParams params);
+
+    /**
+     * MLME-GET.confirm handler (invoked by the MAC layer).
+     */
+    void MlmeGetConfirm(lrwpan::MacStatus status,
+                        lrwpan::MacPibAttributeIdentifier id,
+                        Ptr<lrwpan::MacPibAttributes> attribute);
+
+    /**
+     * MLME-SET.confirm handler (invoked by the MAC layer).
+     */
+    void MlmeSetConfirm(lrwpan::MlmeSetConfirmParams params);
+
+    /**
+     * MLME-START.confirm handler (invoked by the MAC layer).
+     */
+    void MlmeStartConfirm(lrwpan::MlmeStartConfirmParams params);
+
+    /**
+     * MLME-SCAN.confirm handler (invoked by the MAC layer).
+     */
+    void MlmeScanConfirm(lrwpan::MlmeScanConfirmParams params);
+
+    /**
+     * MLME-ASSOCIATE.indication handler (invoked by the MAC layer).
+     */
+    void MlmeAssociateIndication(lrwpan::MlmeAssociateIndicationParams params);
+
+    /**
+     * MLME-ASSOCIATE.confirm handler (invoked by the MAC layer).
+     */
+    void MlmeAssociateConfirm(lrwpan::MlmeAssociateConfirmParams params);
+
+    /**
+     * MLME orphan indication handler (invoked by the MAC layer).
+     */
+    void MlmeOrphanIndication(lrwpan::MlmeOrphanIndicationParams params);
+
+    /**
+     * MLME-COMM-STATUS.indication handler (invoked by the MAC layer).
+     */
+    void MlmeCommStatusIndication(lrwpan::MlmeCommStatusIndicationParams params);
+
+    /**
+     * MLME-BEACON-NOTIFY.indication handler (invoked by the MAC layer).
+     */
+    void MlmeBeaconNotifyIndication(lrwpan::MlmeBeaconNotifyIndicationParams params);
+
+    /**
+     * Register a callback for MCPS-DATA.indication.
+     */
+    void SetMcpsDataIndicationCallback(
+        Callback<void, lrwpan::McpsDataIndicationParams, Ptr<Packet>> c);
+
+    /**
+     * Register a callback for MCPS-DATA.confirm.
+     */
+    void SetMcpsDataConfirmCallback(Callback<void, lrwpan::McpsDataConfirmParams> c);
+
   protected:
     /**
      * Dispose of the Objects used by the NishiokaNwk
@@ -114,7 +191,12 @@ class NishiokaNwk : public Object
 
   private:
     Ptr<lrwpan::LrWpanMacBase> m_mac; //!< The underlying LrWpan MAC connected to this NWK
+    Mac64Address m_extendedAddress;   //!< Extended address from MAC PIB
     std::map<Mac16Address, Mac16Address> m_routingTable; //!< Routing table: dst -> nextHop
+    Callback<void, lrwpan::McpsDataIndicationParams, Ptr<Packet>>
+        m_mcpsDataIndicationCallback; //!< Upper-layer data indication callback
+    Callback<void, lrwpan::McpsDataConfirmParams>
+        m_mcpsDataConfirmCallback; //!< Upper-layer data confirm callback
 };
 
 } // namespace nishioka

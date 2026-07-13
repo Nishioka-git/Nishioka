@@ -8,7 +8,6 @@
  */
 
 #include "nishioka-stack.h"
-#include "nishioka-nwk.h"
 
 #include "ns3/channel.h"
 #include "ns3/log.h"
@@ -39,10 +38,8 @@ NishiokaStack::GetTypeId()
 }
 
 NishiokaStack::NishiokaStack()
-    : m_nwk(nullptr)
 {
     NS_LOG_FUNCTION(this);
-    // Create NWK layer by default
     m_nwk = CreateObject<NishiokaNwk>();
 }
 
@@ -58,8 +55,8 @@ NishiokaStack::DoDispose()
 
     m_netDevice = nullptr;
     m_node = nullptr;
-    m_mac = nullptr;
     m_nwk = nullptr;
+    m_mac = nullptr;
     Object::DoDispose();
 }
 
@@ -68,29 +65,41 @@ NishiokaStack::DoInitialize()
 {
     NS_LOG_FUNCTION(this);
 
+    NS_ABORT_MSG_UNLESS(m_nwk, "NishiokaNwk not found when attempting to install NishiokaStack");
+
+    AggregateObject(m_nwk);
+
     NS_ABORT_MSG_UNLESS(m_netDevice,
                         "Invalid NetDevice found when attempting to install NishiokaStack");
 
-    // Make sure the NetDevice is previously initialized
-    // before using NishiokaStack
+    // Make sure the NetDevice is previously initialized before using NishiokaStack
     m_netDevice->Initialize();
 
-    // Get MAC layer from NetDevice
     m_mac = m_netDevice->GetObject<LrWpanMacBase>();
     NS_ABORT_MSG_UNLESS(m_mac,
                         "No valid LrWpanMacBase found in this NetDevice, cannot use NishiokaStack");
 
-    // Aggregate NWK layer to the node
-    if (m_nwk)
-    {
-        m_node->AggregateObject(m_nwk);
-        m_nwk->SetMac(m_mac);
-        NS_LOG_INFO("NishiokaNwk aggregated to node " << m_node->GetId());
-    }
+    // Set NWK callback hooks with the MAC (same pattern as ZigbeeStack)
+    m_nwk->SetMac(m_mac);
+    m_mac->SetMcpsDataIndicationCallback(MakeCallback(&NishiokaNwk::McpsDataIndication, m_nwk));
+    m_mac->SetMlmeOrphanIndicationCallback(MakeCallback(&NishiokaNwk::MlmeOrphanIndication, m_nwk));
+    m_mac->SetMlmeCommStatusIndicationCallback(
+        MakeCallback(&NishiokaNwk::MlmeCommStatusIndication, m_nwk));
+    m_mac->SetMlmeBeaconNotifyIndicationCallback(
+        MakeCallback(&NishiokaNwk::MlmeBeaconNotifyIndication, m_nwk));
+    m_mac->SetMlmeAssociateIndicationCallback(
+        MakeCallback(&NishiokaNwk::MlmeAssociateIndication, m_nwk));
+    m_mac->SetMcpsDataConfirmCallback(MakeCallback(&NishiokaNwk::McpsDataConfirm, m_nwk));
+    m_mac->SetMlmeScanConfirmCallback(MakeCallback(&NishiokaNwk::MlmeScanConfirm, m_nwk));
+    m_mac->SetMlmeStartConfirmCallback(MakeCallback(&NishiokaNwk::MlmeStartConfirm, m_nwk));
+    m_mac->SetMlmeSetConfirmCallback(MakeCallback(&NishiokaNwk::MlmeSetConfirm, m_nwk));
+    m_mac->SetMlmeGetConfirmCallback(MakeCallback(&NishiokaNwk::MlmeGetConfirm, m_nwk));
+    m_mac->SetMlmeAssociateConfirmCallback(MakeCallback(&NishiokaNwk::MlmeAssociateConfirm, m_nwk));
 
-    NS_LOG_INFO("NishiokaStack initialized: Node=" << m_node->GetId()
-                                                    << " NetDevice=" << m_netDevice
-                                                    << " NWK=" << (m_nwk ? "enabled" : "disabled"));
+    // Obtain extended address as soon as NWK is set to begin operations
+    m_mac->MlmeGetRequest(MacPibAttributeIdentifier::macExtendedAddress);
+
+    NS_LOG_INFO("NishiokaStack initialized: Node=" << m_node->GetId() << " NetDevice=" << m_netDevice);
 
     Object::DoInitialize();
 }
@@ -117,8 +126,11 @@ void
 NishiokaStack::SetNetDevice(Ptr<NetDevice> netDevice)
 {
     NS_LOG_FUNCTION(this << netDevice);
+    NS_ABORT_MSG_UNLESS(netDevice, "Invalid NetDevice passed to NishiokaStack::SetNetDevice");
     m_netDevice = netDevice;
     m_node = m_netDevice->GetNode();
+    NS_ABORT_MSG_UNLESS(m_node,
+                        "NetDevice must be attached to a Node before NishiokaStack::SetNetDevice");
 }
 
 Ptr<LrWpanMacBase>
@@ -136,7 +148,8 @@ NishiokaStack::GetNwk() const
 void
 NishiokaStack::SetNwk(Ptr<NishiokaNwk> nwk)
 {
-    NS_LOG_FUNCTION(this << nwk);
+    NS_LOG_FUNCTION(this);
+    NS_ABORT_MSG_IF(NishiokaStack::IsInitialized(), "NWK layer cannot be set after initialization");
     m_nwk = nwk;
 }
 

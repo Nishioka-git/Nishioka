@@ -34,6 +34,7 @@ NishiokaNwk::GetTypeId()
 }
 
 NishiokaNwk::NishiokaNwk()
+    : m_extendedAddress(Mac64Address("00:00:00:00:00:00:00:00"))
 {
     NS_LOG_FUNCTION(this);
 }
@@ -142,6 +143,109 @@ NishiokaNwk::GetRouteCount() const
 {
     NS_LOG_FUNCTION(this);
     return m_routingTable.size();
+}
+
+Mac64Address
+NishiokaNwk::GetExtendedAddress() const
+{
+    NS_LOG_FUNCTION(this);
+    return m_extendedAddress;
+}
+
+void
+NishiokaNwk::McpsDataIndication(McpsDataIndicationParams params, Ptr<Packet> msdu)
+{
+    NS_LOG_FUNCTION(this << params.m_srcAddr << params.m_dstAddr);
+    if (!m_mcpsDataIndicationCallback.IsNull())
+    {
+        m_mcpsDataIndicationCallback(params, msdu);
+    }
+}
+
+void
+NishiokaNwk::McpsDataConfirm(McpsDataConfirmParams params)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(params.m_status));
+    if (!m_mcpsDataConfirmCallback.IsNull())
+    {
+        m_mcpsDataConfirmCallback(params);
+    }
+}
+
+void
+NishiokaNwk::MlmeGetConfirm(MacStatus status, MacPibAttributeIdentifier id, Ptr<MacPibAttributes> attribute)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(status) << static_cast<int>(id));
+    if (status == MacStatus::SUCCESS && attribute)
+    {
+        if (id == MacPibAttributeIdentifier::macExtendedAddress)
+        {
+            m_extendedAddress = attribute->macExtendedAddress;
+        }
+    }
+}
+
+void
+NishiokaNwk::MlmeSetConfirm(MlmeSetConfirmParams params)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(params.m_status));
+}
+
+void
+NishiokaNwk::MlmeStartConfirm(MlmeStartConfirmParams params)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(params.m_status));
+}
+
+void
+NishiokaNwk::MlmeScanConfirm(MlmeScanConfirmParams params)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(params.m_status));
+}
+
+void
+NishiokaNwk::MlmeAssociateIndication(MlmeAssociateIndicationParams params)
+{
+    NS_LOG_FUNCTION(this << params.m_extDevAddr);
+}
+
+void
+NishiokaNwk::MlmeAssociateConfirm(MlmeAssociateConfirmParams params)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(params.m_status));
+}
+
+void
+NishiokaNwk::MlmeOrphanIndication(MlmeOrphanIndicationParams params)
+{
+    NS_LOG_FUNCTION(this << params.m_orphanAddr);
+}
+
+void
+NishiokaNwk::MlmeCommStatusIndication(MlmeCommStatusIndicationParams params)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(params.m_status));
+}
+
+void
+NishiokaNwk::MlmeBeaconNotifyIndication(MlmeBeaconNotifyIndicationParams params)
+{
+    NS_LOG_FUNCTION(this << static_cast<int>(params.m_bsn));
+}
+
+void
+NishiokaNwk::SetMcpsDataIndicationCallback(
+    Callback<void, McpsDataIndicationParams, Ptr<Packet>> c)
+{
+    NS_LOG_FUNCTION(this);
+    m_mcpsDataIndicationCallback = c;
+}
+
+void
+NishiokaNwk::SetMcpsDataConfirmCallback(Callback<void, McpsDataConfirmParams> c)
+{
+    NS_LOG_FUNCTION(this);
+    m_mcpsDataConfirmCallback = c;
 }
 
 } // namespace nishioka

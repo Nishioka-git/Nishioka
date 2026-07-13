@@ -25,12 +25,10 @@ namespace nishioka
  *
  * @brief Holds a vector of ns3::NishiokaStack pointers
  *
- * Typically NishiokaStacks are installed on top of a pre-existing NetDevice
- * (an LrWpanNetDevice or UartLrWpanNetDevice) which on itself has already being aggregated to a node.
- * A NishiokaHelper Install method takes a NetDeviceContainer.
- * For each of the NetDevice in the NetDeviceContainer
- * the helper will instantiate a NishiokaStack, connect the necessary hooks between
- * the MAC (LrWpanMac or UartLrWpanMac) and the NishiokaStack and install it to the node.
+ * Typically each node has one LrWpanNetDevice (PHY+MAC, from LrWpanHelper) and one
+ * NishiokaStack (from NishiokaHelper::Install). For each NetDevice in the container,
+ * the helper instantiates a NishiokaStack, aggregates it on the device's Node, and
+ * connects the MAC to NishiokaNwk inside NishiokaStack::DoInitialize.
  * For each of these NishiokaStacks, the helper also adds the NishiokaStack into a Container
  * for later use by the caller. This is that container used to hold the Ptr<NishiokaStack> which are
  * instantiated by the NishiokaHelper.

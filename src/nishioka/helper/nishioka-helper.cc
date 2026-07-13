@@ -9,6 +9,7 @@
 
 #include "nishioka-helper.h"
 
+#include "ns3/buffer.h"
 #include "ns3/log.h"
 #include "ns3/packet.h"
 #include "ns3/node.h"
@@ -17,6 +18,10 @@
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/lr-wpan-mac-base.h"
 #include "ns3/lr-wpan-fields.h"
+
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 namespace ns3
 {
@@ -134,33 +139,169 @@ NishiokaHelper::ExtractHeader(Ptr<Packet> packet, nishioka::NishiokaHeader& head
 {
     NS_LOG_FUNCTION(this << packet);
 
-    // Create a copy to avoid modifying the original
-    Ptr<Packet> pktCopy = packet->Copy();
-
-    // Set address modes before removing header
-    header.SetDstAddrMode(nishioka::NishiokaHeader::SHORTADDR);
-    header.SetSrcAddrMode(nishioka::NishiokaHeader::SHORTADDR);
-
-    // Check if packet is large enough
-    if (pktCopy->GetSize() < header.GetSerializedSize()) {
-        NS_LOG_WARN("Packet too small to contain NishiokaHeader");
+    const uint32_t totalSize = packet->GetSize();
+    if (totalSize < 6)
+    {
+        NS_LOG_WARN("Packet too small for NishiokaHeader base fields");
         return false;
     }
 
-    // Remove header
-    pktCopy->RemoveHeader(header);
+    // Fast path: CreatePacket() always uses short destination and source addresses.
+    {
+        nishioka::NishiokaHeader probe;
+        probe.SetDstAddrMode(nishioka::NishiokaHeader::SHORTADDR);
+        probe.SetSrcAddrMode(nishioka::NishiokaHeader::SHORTADDR);
+        const uint32_t H = probe.GetSerializedSize();
 
-    // Extract payload data
-    std::vector<uint8_t> buffer;
-    buffer.resize(pktCopy->GetSize());
-    pktCopy->CopyData(buffer.data(), pktCopy->GetSize());
-    data = std::string(buffer.begin(), buffer.end());
+        if (totalSize >= H)
+        {
+            Ptr<Packet> copy = packet->Copy();
+            const uint32_t before = copy->GetSize();
+            nishioka::NishiokaHeader parsed;
+            parsed.SetDstAddrMode(nishioka::NishiokaHeader::SHORTADDR);
+            parsed.SetSrcAddrMode(nishioka::NishiokaHeader::SHORTADDR);
+            copy->RemoveHeader(parsed);
+            const uint32_t after = copy->GetSize();
 
-    NS_LOG_DEBUG("Extracted NishiokaHeader: "
-                 << "Src=" << header.GetShortSrcAddr()
-                 << " Dst=" << header.GetShortDstAddr()
-                 << " Battery=" << (int)header.GetBattery() << "%"
-                 << " Payload size=" << data.size() << " bytes");
+            if (before - after == H)
+            {
+                header = parsed;
+                if (after > 0)
+                {
+                    std::vector<uint8_t> payload(after);
+                    copy->CopyData(payload.data(), after);
+                    data.assign(payload.begin(), payload.end());
+                }
+                else
+                {
+                    data.clear();
+                }
+
+                NS_LOG_DEBUG("Extracted NishiokaHeader (short-short fast path): "
+                             << "Src=" << header.GetShortSrcAddr()
+                             << " Dst=" << header.GetShortDstAddr()
+                             << " Payload size=" << data.size());
+                return true;
+            }
+        }
+    }
+
+    std::vector<uint8_t> buf(totalSize);
+    packet->CopyData(buf.data(), totalSize);
+
+    using AM = nishioka::NishiokaHeader::AddrModeType;
+    const AM dstModes[] = {AM::NOADDR, AM::SHORTADDR, AM::EXTADDR};
+    const AM srcModes[] = {AM::NOADDR, AM::SHORTADDR, AM::EXTADDR};
+
+    std::vector<std::pair<uint8_t, uint8_t>> candidates;
+    for (AM dm : dstModes)
+    {
+        for (AM sm : srcModes)
+        {
+            nishioka::NishiokaHeader probe;
+            probe.SetDstAddrMode(static_cast<uint8_t>(dm));
+            probe.SetSrcAddrMode(static_cast<uint8_t>(sm));
+            candidates.emplace_back(static_cast<uint8_t>(dm), static_cast<uint8_t>(sm));
+        }
+    }
+
+    std::sort(candidates.begin(),
+              candidates.end(),
+              [](const std::pair<uint8_t, uint8_t>& a, const std::pair<uint8_t, uint8_t>& b) {
+                  nishioka::NishiokaHeader pa;
+                  pa.SetDstAddrMode(a.first);
+                  pa.SetSrcAddrMode(a.second);
+                  nishioka::NishiokaHeader pb;
+                  pb.SetDstAddrMode(b.first);
+                  pb.SetSrcAddrMode(b.second);
+                  return pa.GetSerializedSize() > pb.GetSerializedSize();
+              });
+
+    bool found = false;
+    uint32_t bestH = 0;
+    nishioka::NishiokaHeader bestHeader;
+    std::string bestData;
+
+    for (const auto& c : candidates)
+    {
+        nishioka::NishiokaHeader probe;
+        probe.SetDstAddrMode(c.first);
+        probe.SetSrcAddrMode(c.second);
+        const uint32_t H = probe.GetSerializedSize();
+        if (H > totalSize)
+        {
+            continue;
+        }
+
+        // Reject NOADDR layouts when trailing bytes remain (false positive on 6-byte prefix).
+        if (totalSize > H &&
+            (c.first == static_cast<uint8_t>(AM::NOADDR) ||
+             c.second == static_cast<uint8_t>(AM::NOADDR)))
+        {
+            continue;
+        }
+
+        Buffer wire;
+        wire.AddAtStart(H);
+        Buffer::Iterator wit = wire.Begin();
+        for (uint32_t i = 0; i < H; ++i)
+        {
+            wit.WriteU8(buf[i]);
+        }
+
+        nishioka::NishiokaHeader parsed;
+        parsed.SetDstAddrMode(c.first);
+        parsed.SetSrcAddrMode(c.second);
+        Buffer::Iterator rit = wire.Begin();
+        const uint32_t n = parsed.Deserialize(rit);
+        if (n != H)
+        {
+            continue;
+        }
+
+        Buffer roundTrip;
+        roundTrip.AddAtStart(H);
+        Buffer::Iterator sit = roundTrip.Begin();
+        parsed.Serialize(sit);
+
+        Buffer::Iterator chk = roundTrip.Begin();
+        bool match = true;
+        for (uint32_t i = 0; i < H; ++i)
+        {
+            if (chk.ReadU8() != buf[i])
+            {
+                match = false;
+                break;
+            }
+        }
+        if (!match)
+        {
+            continue;
+        }
+
+        if (H > bestH)
+        {
+            bestH = H;
+            bestHeader = parsed;
+            bestData.assign(reinterpret_cast<const char*>(buf.data() + H), totalSize - H);
+            found = true;
+        }
+    }
+
+    if (!found)
+    {
+        NS_LOG_WARN("Could not deserialize NishiokaHeader (no matching address layout)");
+        return false;
+    }
+
+    header = bestHeader;
+    data = bestData;
+
+    NS_LOG_DEBUG("Extracted NishiokaHeader (probe fallback H=" << bestH << "): "
+                 << "SrcMode=" << (int)header.GetSrcAddrMode()
+                 << " DstMode=" << (int)header.GetDstAddrMode()
+                 << " Src=" << header.GetShortSrcAddr() << " Dst=" << header.GetShortDstAddr()
+                 << " Payload size=" << data.size());
 
     return true;
 }
@@ -195,21 +336,53 @@ NishiokaHelper::UpdateRoutingInfo(Ptr<Packet> packet,
 {
     NS_LOG_FUNCTION(this << newSrcAddr << (int)newBattery << (int)newLqi << (int)newHops);
 
-    // Extract existing header and data
     nishioka::NishiokaHeader header;
     std::string data;
-    
-    if (!ExtractHeader(packet, header, data)) {
+
+    if (!ExtractHeader(packet, header, data))
+    {
         NS_LOG_ERROR("Failed to extract header from packet");
         return nullptr;
     }
 
-    // Get destination address from original header
-    Mac16Address dstAddr = header.GetShortDstAddr();
-    uint16_t panId = header.GetDstPanId();
+    header.SetSrcAddrFields(header.GetSrcPanId(), newSrcAddr);
+    header.SetBattery(static_cast<uint16_t>(newBattery));
+    const uint16_t evaluation =
+        (static_cast<uint16_t>(newLqi) << 8) | static_cast<uint16_t>(newHops);
+    header.SetEvaluation(evaluation);
 
-    // Create new packet with updated information
-    return CreatePacket(data, newSrcAddr, dstAddr, panId, newBattery, newLqi, newHops);
+    Ptr<Packet> rebuilt = Create<Packet>((const uint8_t*)data.data(), data.size());
+    rebuilt->AddHeader(header);
+    return rebuilt;
+}
+
+Ptr<Packet>
+NishiokaHelper::UpdateRoutingInfo(Ptr<Packet> packet,
+                                    Mac64Address newSrcAddr,
+                                    uint8_t newBattery,
+                                    uint8_t newLqi,
+                                    uint8_t newHops)
+{
+    NS_LOG_FUNCTION(this << newSrcAddr << (int)newBattery << (int)newLqi << (int)newHops);
+
+    nishioka::NishiokaHeader header;
+    std::string data;
+
+    if (!ExtractHeader(packet, header, data))
+    {
+        NS_LOG_ERROR("Failed to extract header from packet");
+        return nullptr;
+    }
+
+    header.SetSrcAddrFields(header.GetSrcPanId(), newSrcAddr);
+    header.SetBattery(static_cast<uint16_t>(newBattery));
+    const uint16_t evaluation =
+        (static_cast<uint16_t>(newLqi) << 8) | static_cast<uint16_t>(newHops);
+    header.SetEvaluation(evaluation);
+
+    Ptr<Packet> rebuilt = Create<Packet>((const uint8_t*)data.data(), data.size());
+    rebuilt->AddHeader(header);
+    return rebuilt;
 }
 
 uint8_t
@@ -227,75 +400,58 @@ NishiokaHelper::ResetSeqNum()
 }
 
 nishioka::NishiokaStackContainer
-NishiokaHelper::Install(NetDeviceContainer netDevices, const std::vector<Vector>& positions)
+NishiokaHelper::Install(NetDeviceContainer netDevices)
 {
     NS_LOG_FUNCTION(this);
 
     nishioka::NishiokaStackContainer stackContainer;
-    NodeContainer nodes;
-
-    // Create nodes for each device
-    for (uint32_t i = 0; i < netDevices.GetN(); ++i)
-    {
-        Ptr<Node> node = CreateObject<Node>();
-        nodes.Add(node);
-    }
-
-    // Install stacks
-    return Install(netDevices, positions, nodes);
-}
-
-nishioka::NishiokaStackContainer
-NishiokaHelper::Install(NetDeviceContainer netDevices,
-                        const std::vector<Vector>& positions,
-                        NodeContainer nodes)
-{
-    NS_LOG_FUNCTION(this);
-
-    nishioka::NishiokaStackContainer stackContainer;
-
-    NS_ASSERT_MSG(netDevices.GetN() == nodes.GetN(),
-                  "Number of devices must match number of nodes");
-
-    if (!positions.empty())
-    {
-        NS_ASSERT_MSG(positions.size() == netDevices.GetN(),
-                      "Number of positions must match number of devices");
-    }
 
     for (uint32_t i = 0; i < netDevices.GetN(); ++i)
     {
         Ptr<NetDevice> device = netDevices.Get(i);
-        Ptr<Node> node = nodes.Get(i);
 
         NS_ASSERT_MSG(device, "NetDevice not found at index " << i);
-        NS_ASSERT_MSG(node, "Node not found at index " << i);
 
+        Ptr<Node> node = device->GetNode();
+        NS_ABORT_MSG_UNLESS(node,
+                            "NetDevice at index "
+                                << i
+                                << " is not attached to a Node. Install the NetDevice first "
+                                   "(e.g. LrWpanHelper::Install or Node::AddDevice).");
+
+        // MAC may not be aggregated until NetDevice::Initialize() (see LrWpanNetDevice).
+        // LrWpanMacBase availability is verified in NishiokaStack::DoInitialize().
         NS_LOG_LOGIC("Installing NishiokaStack on node " << node->GetId());
 
-        // Add device to node if not already added
-        if (device->GetNode() != node)
-        {
-            node->AddDevice(device);
-        }
-
-        // Set up mobility model if position is provided
-        if (!positions.empty() && i < positions.size())
-        {
-            Ptr<ConstantPositionMobilityModel> mobility =
-                CreateObject<ConstantPositionMobilityModel>();
-            mobility->SetPosition(positions[i]);
-            node->AggregateObject(mobility);
-            NS_LOG_LOGIC("Set mobility model for node " << node->GetId()
-                                                         << " at position " << positions[i]);
-        }
-
-        // Create and install NishiokaStack
         Ptr<nishioka::NishiokaStack> stack = m_stackFactory.Create<nishioka::NishiokaStack>();
         stackContainer.Add(stack);
         node->AggregateObject(stack);
         stack->SetNetDevice(device);
-        // Note: Initialize() is called automatically by ns-3 when the simulation starts
+    }
+
+    return stackContainer;
+}
+
+nishioka::NishiokaStackContainer
+NishiokaHelper::Install(NetDeviceContainer netDevices, const std::vector<Vector>& positions)
+{
+    NS_LOG_FUNCTION(this);
+
+    NS_ASSERT_MSG(positions.size() == netDevices.GetN(),
+                  "Number of positions must match number of NetDevices");
+
+    nishioka::NishiokaStackContainer stackContainer = Install(netDevices);
+
+    for (uint32_t i = 0; i < netDevices.GetN(); ++i)
+    {
+        Ptr<Node> node = netDevices.Get(i)->GetNode();
+        NS_ASSERT_MSG(node, "NetDevice at index " << i << " has no Node");
+
+        Ptr<ConstantPositionMobilityModel> mobility = CreateObject<ConstantPositionMobilityModel>();
+        mobility->SetPosition(positions[i]);
+        node->AggregateObject(mobility);
+        NS_LOG_LOGIC("Set mobility model for node " << node->GetId() << " at position "
+                                                    << positions[i]);
     }
 
     return stackContainer;

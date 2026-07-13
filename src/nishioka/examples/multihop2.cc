@@ -94,16 +94,20 @@ static uint32_t g_txCount = 0;
 static uint32_t g_rxCount = 0;
 static uint16_t g_nextShortAddr = 0x0002; // 0x0002から動的割当開始
 static uint16_t g_nextShortAddrDev01 = 0x0003; // dev01が子に割り当てるアドレス開始値
+static uint16_t g_nextShortAddrDev02 = 0x0004; // dev02が子に割り当てるアドレス開始値
 static Mac16Address g_dev01ShortAddr = Mac16Address("00:02"); // dev01のアドレスを保持
+static Mac16Address g_dev02ShortAddr = Mac16Address("00:03"); // dev02のアドレスを保持
 
 static Ptr<UartLrWpanNetDevice> g_coordinatorDevice; // コーディネータ
 static Ptr<UartLrWpanNetDevice> g_uartNetDevice1; // dev01
 static Ptr<UartLrWpanNetDevice> g_uartNetDevice2; // dev02
+static Ptr<UartLrWpanNetDevice> g_uartNetDevice3; // dev03
 
 // NishiokaStackへのポインタ
 static Ptr<NishiokaStack> g_coordinatorStack; // コーディネータのスタック
 static Ptr<NishiokaStack> g_dev01Stack; // dev01のスタック
 static Ptr<NishiokaStack> g_dev02Stack; // dev02のスタック
+static Ptr<NishiokaStack> g_dev03Stack; // dev03のスタック
 
 // NishiokaStackContainer
 static NishiokaStackContainer g_stacks; // すべてのスタックを管理
@@ -112,11 +116,13 @@ static NishiokaStackContainer g_stacks; // すべてのスタックを管理
 static Mac16Address g_coordinatorAddr = Mac16Address("00:01");
 static Mac16Address g_dev01Addr = Mac16Address("FF:FE"); // 初期値、アソシエーション後に更新
 static Mac16Address g_dev02Addr = Mac16Address("FF:FD"); // 初期値、アソシエーション後に更新
+static Mac16Address g_dev03Addr = Mac16Address("FF:FC"); // 初期値、アソシエーション後に更新
 
 // 各デバイスのバッテリー残量（%）
 static uint8_t g_batteryLevelCoordinator = 100;
 static uint8_t g_batteryLevelDev01 = 100;
 static uint8_t g_batteryLevelDev02 = 100;
+static uint8_t g_batteryLevelDev03 = 100;
 
 // RREQ管理
 static uint16_t g_rreqIdCounter = 0; // RREQ IDカウンター
@@ -124,15 +130,17 @@ static uint16_t g_rreqIdCounter = 0; // RREQ IDカウンター
 static std::map<std::pair<Mac16Address, uint16_t>, bool> g_processedRREQsCoordinator;
 static std::map<std::pair<Mac16Address, uint16_t>, bool> g_processedRREQsDev01;
 static std::map<std::pair<Mac16Address, uint16_t>, bool> g_processedRREQsDev02;
+static std::map<std::pair<Mac16Address, uint16_t>, bool> g_processedRREQsDev03;
 
 // PAN内の総デバイス数管理
-static uint16_t g_totalDevicesInPAN = 3; // コーディネータ + dev01 + dev02
+static uint16_t g_totalDevicesInPAN = 4; // コーディネータ + dev01 + dev02 + dev03
 static uint16_t g_associatedDeviceCount = 0; // アソシエーション済みデバイス数
 
 // 各デバイスの個別ルーティングテーブル（dstアドレスをキーとする）
 static std::map<Mac16Address, RoutingEntry> g_routingTableCoordinator; // コーディネータのルーティングテーブル
 static std::map<Mac16Address, RoutingEntry> g_routingTableDev01; // dev01のルーティングテーブル
 static std::map<Mac16Address, RoutingEntry> g_routingTableDev02; // dev02のルーティングテーブル
+static std::map<Mac16Address, RoutingEntry> g_routingTableDev03; // dev03のルーティングテーブル
 static uint16_t g_routingSeqNum = 0; // src用のシーケンス番号
 
 // battery.txtからバッテリー残量を読み取る関数
@@ -192,6 +200,8 @@ return g_batteryLevelCoordinator;
 return g_batteryLevelDev01;
 } else if (device == g_uartNetDevice2) {
 return g_batteryLevelDev02;
+} else if (device == g_uartNetDevice3) {
+return g_batteryLevelDev03;
 }
 return 100; // デフォルト値
 }
@@ -205,6 +215,8 @@ return g_coordinatorDevice;
 return g_uartNetDevice1;
 } else if (stack == g_dev02Stack) {
 return g_uartNetDevice2;
+} else if (stack == g_dev03Stack) {
+return g_uartNetDevice3;
 }
 return nullptr;
 }
@@ -228,6 +240,8 @@ return g_coordinatorStack;
 return g_dev01Stack;
 } else if (device == g_uartNetDevice2) {
 return g_dev02Stack;
+} else if (device == g_uartNetDevice3) {
+return g_dev03Stack;
 }
 return nullptr;
 }
@@ -298,9 +312,11 @@ std::cout << "Using battery file: " << batteryFilePath << std::endl;
 g_batteryLevelCoordinator = ReadBatteryLevel(batteryFilePath, g_batteryLevelCoordinator);
 g_batteryLevelDev01 = ReadBatteryLevel(batteryFilePath, g_batteryLevelDev01);
 g_batteryLevelDev02 = ReadBatteryLevel(batteryFilePath, g_batteryLevelDev02);
+g_batteryLevelDev03 = ReadBatteryLevel(batteryFilePath, g_batteryLevelDev03);
 std::cout << "Coordinator Battery: " << (int)g_batteryLevelCoordinator << "%\n";
 std::cout << "Dev01 Battery: " << (int)g_batteryLevelDev01 << "%\n";
 std::cout << "Dev02 Battery: " << (int)g_batteryLevelDev02 << "%\n";
+std::cout << "Dev03 Battery: " << (int)g_batteryLevelDev03 << "%\n";
 std::cout << "=============================================\n\n";
 // 次回の更新をスケジュール（50秒後）
 Simulator::Schedule(Seconds(50.0), &UpdateBatteryLevels);
@@ -355,6 +371,8 @@ return g_routingTableCoordinator;
 return g_routingTableDev01;
 } else if (device == g_uartNetDevice2) {
 return g_routingTableDev02;
+} else if (device == g_uartNetDevice3) {
+return g_routingTableDev03;
 }
 // デフォルトはコーディネータのテーブル
 return g_routingTableCoordinator;
@@ -369,6 +387,8 @@ return g_coordinatorAddr;
 return g_dev01Addr;
 } else if (device == g_uartNetDevice2) {
 return g_dev02Addr;
+} else if (device == g_uartNetDevice3) {
+return g_dev03Addr;
 }
 // デフォルトはコーディネータのアドレス
 return g_coordinatorAddr;
@@ -383,6 +403,8 @@ return g_processedRREQsCoordinator;
 return g_processedRREQsDev01;
 } else if (device == g_uartNetDevice2) {
 return g_processedRREQsDev02;
+} else if (device == g_uartNetDevice3) {
+return g_processedRREQsDev03;
 }
 // デフォルトはコーディネータ
 return g_processedRREQsCoordinator;
@@ -1176,29 +1198,50 @@ associateParams.m_coordShortAddr = g_dev01ShortAddr;
 g_dev02Stack->GetMac()->MlmeAssociateRequest(associateParams);
 });
 }
-// dev02のアソシエーション成功後、RREQでルート発見してからメッセージを送信
+// dev02のアソシエーション成功後、dev03のアソシエーション要求をスケジューリング
 if (params.m_status == MacStatus::SUCCESS && device == g_uartNetDevice2) {
+g_dev02ShortAddr = params.m_assocShortAddr;
 g_dev02Addr = params.m_assocShortAddr; // グローバル変数を更新
 
 std::cout << "\n========== dev02 Association Complete ==========\n";
-std::cout << "All devices associated. Starting route discovery...\n";
+std::cout << "Scheduling dev03 association to dev02...\n";
 std::cout << "===============================================\n\n";
 
-// コーディネータからdev02へのRREQを送信
+// dev03のアソシエーション要求をスケジューリング
+Simulator::Schedule(Seconds(0.5), [=]() {
+MlmeAssociateRequestParams associateParams;
+associateParams.m_chNum = 0xD;
+associateParams.m_chPage = 0;
+associateParams.m_coordAddrMode = SHORT_ADDR;
+associateParams.m_coordPanId = 0xCAFE;
+associateParams.m_capabilityInfo = 0x80; // short address割当希望
+associateParams.m_coordShortAddr = g_dev02ShortAddr;
+g_dev03Stack->GetMac()->MlmeAssociateRequest(associateParams);
+});
+}
+// dev03のアソシエーション成功後、RREQでルート発見してからメッセージを送信
+if (params.m_status == MacStatus::SUCCESS && device == g_uartNetDevice3) {
+g_dev03Addr = params.m_assocShortAddr; // グローバル変数を更新
+
+std::cout << "\n========== dev03 Association Complete ==========\n";
+std::cout << "All devices associated. Starting route discovery to dev03...\n";
+std::cout << "===============================================\n\n";
+
+// コーディネータからdev03（4ホップ先）へのRREQを送信
 Simulator::Schedule(Seconds(0.2), [=]() {
-Mac16Address targetAddr = Mac16Address("00:03"); // dev02のアドレス
-std::cout << "Coordinator initiating route discovery to dev02\n";
+Mac16Address targetAddr = Mac16Address("00:04"); // dev03のアドレス
+std::cout << "Coordinator initiating route discovery to dev03 (4-hop)\n";
 SendRREQ(g_coordinatorStack, targetAddr);
 
 // RREPを待ってからデータ送信（1秒後）
 Simulator::Schedule(Seconds(1.0), [=]() {
-// コーディネータのルーティングテーブルからdev02への経路を検索
-auto it = g_routingTableCoordinator.find(Mac16Address("00:03"));
+// コーディネータのルーティングテーブルからdev03への経路を検索
+auto it = g_routingTableCoordinator.find(Mac16Address("00:04"));
 if (it != g_routingTableCoordinator.end()) {
 RoutingEntry& entry = it->second;
 // 送信時にコーディネータの最新バッテリー残量を反映
 entry.energy = GetBatteryLevel(g_coordinatorDevice);
-std::string sendMsg = "Hello from Coordinator to dev02";
+std::string sendMsg = "Hello from Coordinator to dev03 (4-hop)";
 // ルーティング情報を埋め込んだパケットを作成（NishiokaHeaderを使用）
 Mac16Address coordinatorAddr = GetDeviceAddress(g_coordinatorDevice);
 std::cout << Simulator::Now().As(Time::S)
@@ -1217,7 +1260,7 @@ g_txCount++;
 std::cout << "  Total sent packets: " << g_txCount << std::endl;
 g_coordinatorStack->GetMac()->McpsDataRequest(dataParams, packet);
 } else {
-std::cout << "  [ERROR] No route to dev02 found after RREQ!" << std::endl;
+std::cout << "  [ERROR] No route to dev03 found after RREQ!" << std::endl;
 }
 });
 });
@@ -1249,6 +1292,33 @@ std::cout << "Assigned short address (dev01): " << assignedAddr
 << " | Total associated devices: " << g_associatedDeviceCount
 << "/" << g_totalDevicesInPAN << std::endl;
 }
+
+// dev02がdev03の親としてアソシエーション要求を受ける
+static void
+AssociateIndicationDev02(Ptr<UartLrWpanNetDevice> device, MlmeAssociateIndicationParams params)
+{
+std::cout << Simulator::Now().As(Time::S) << " [ASSOC IND] Node " << device->GetNode()->GetId()
+<< " received association request from device with capability "
+<< std::hex << static_cast<uint32_t>(params.capabilityInfo) << std::dec
+<< " | Dev Addr: " << params.m_extDevAddr << std::endl;
+std::cout << "Sending Association Response (dev02)..." << std::endl;
+
+// dev02がdev03に動的にショートアドレスを割り当て
+Mac16Address assignedAddr = Mac16Address::ConvertFrom(Mac16Address(g_nextShortAddrDev02));
+g_nextShortAddrDev02++;
+
+MlmeAssociateResponseParams respParams;
+respParams.m_assocShortAddr = assignedAddr;
+respParams.m_extDevAddr = params.m_extDevAddr;
+respParams.m_status = MacStatus::SUCCESS;
+device->GetMac()->MlmeAssociateResponse(respParams);
+
+// アソシエーション成功時にデバイス数をカウント
+g_associatedDeviceCount++;
+std::cout << "Assigned short address (dev02): " << assignedAddr
+<< " | Total associated devices: " << g_associatedDeviceCount
+<< "/" << g_totalDevicesInPAN << std::endl;
+}
 int
 main(int argc, char* argv[])
 {
@@ -1263,22 +1333,32 @@ std::cout << " - Coordinator: 1\n";
 std::cout << " - End Devices: " << (g_totalDevicesInPAN - 1) << std::endl;
 std::cout << "==========================================\n\n";
 
-// Create NetDevices
+// One node per device: NetDevice (UART LR-WPAN MAC) + NishiokaStack
+NodeContainer nodes;
+nodes.Create(4);
+
 g_coordinatorDevice = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB0");
 g_uartNetDevice1 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB1");
 g_uartNetDevice2 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB2");
+g_uartNetDevice3 = CreateObject<UartLrWpanNetDevice>("/dev/ttyUSB3");
 
-// Create NetDeviceContainer
+nodes.Get(0)->AddDevice(g_coordinatorDevice);
+nodes.Get(1)->AddDevice(g_uartNetDevice1);
+nodes.Get(2)->AddDevice(g_uartNetDevice2);
+nodes.Get(3)->AddDevice(g_uartNetDevice3);
+
 NetDeviceContainer netDevices;
 netDevices.Add(g_coordinatorDevice);
 netDevices.Add(g_uartNetDevice1);
 netDevices.Add(g_uartNetDevice2);
+netDevices.Add(g_uartNetDevice3);
 
 // Define positions for each device
 std::vector<Vector> positions;
 positions.push_back(Vector(0, 0, 0));    // Coordinator
 positions.push_back(Vector(0, 90, 0));   // Dev01
-positions.push_back(Vector(0, 180, 0));   // Dev02
+positions.push_back(Vector(0, 180, 0));  // Dev02
+positions.push_back(Vector(0, 270, 0));  // Dev03
 
 // Use NishiokaHelper to install stacks
 NishiokaHelper helper;
@@ -1288,12 +1368,14 @@ g_stacks = helper.Install(netDevices, positions);
 g_coordinatorStack = g_stacks.Get(0);
 g_dev01Stack = g_stacks.Get(1);
 g_dev02Stack = g_stacks.Get(2);
+g_dev03Stack = g_stacks.Get(3);
 
 // Configure MAC layer settings using helper (channel, PAN ID, addresses)
 std::vector<Mac16Address> addresses;
 addresses.push_back(Mac16Address("00:01"));  // Coordinator
 addresses.push_back(Mac16Address("FF:FE"));  // Dev01 (temporary, will be assigned during association)
 addresses.push_back(Mac16Address("FF:FD"));  // Dev02 (temporary, will be assigned during association)
+addresses.push_back(Mac16Address("FF:FC"));  // Dev03 (temporary, will be assigned during association)
 helper.ConfigureMac(g_stacks, 0xD, 0xCAFE, addresses);
 
 // Set up callbacks (application-specific, cannot be automated in helper)
@@ -1310,9 +1392,15 @@ MakeBoundCallback(&AssociateConfirm, g_uartNetDevice1));
 g_dev01Stack->GetMac()->SetMlmeAssociateIndicationCallback(
 MakeBoundCallback(&AssociateIndicationDev01, g_uartNetDevice1));
 g_dev02Stack->GetMac()->SetMcpsDataIndicationCallback(
-MakeBoundCallback(&DataIndication, g_dev02Stack));
+MakeBoundCallback(&RelayAndIndicate, g_dev02Stack));
 g_dev02Stack->GetMac()->SetMlmeAssociateConfirmCallback(
 MakeBoundCallback(&AssociateConfirm, g_uartNetDevice2));
+g_dev02Stack->GetMac()->SetMlmeAssociateIndicationCallback(
+MakeBoundCallback(&AssociateIndicationDev02, g_uartNetDevice2));
+g_dev03Stack->GetMac()->SetMcpsDataIndicationCallback(
+MakeBoundCallback(&DataIndication, g_dev03Stack));
+g_dev03Stack->GetMac()->SetMlmeAssociateConfirmCallback(
+MakeBoundCallback(&AssociateConfirm, g_uartNetDevice3));
 // コーディネータとしてネットワーク開始
 MlmeStartRequestParams startParams;
 startParams.m_PanId = 0xCAFE;
@@ -1362,6 +1450,11 @@ std::cout << "Dev02:\n";
 PrintRoutingTable(g_routingTableDev02);
 if (g_dev02Stack && g_dev02Stack->GetNwk()) {
 std::cout << "  NWK Layer Routes: " << g_dev02Stack->GetNwk()->GetRouteCount() << std::endl;
+}
+std::cout << "Dev03:\n";
+PrintRoutingTable(g_routingTableDev03);
+if (g_dev03Stack && g_dev03Stack->GetNwk()) {
+std::cout << "  NWK Layer Routes: " << g_dev03Stack->GetNwk()->GetRouteCount() << std::endl;
 }
 });
 

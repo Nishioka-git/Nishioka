@@ -26,15 +26,18 @@ namespace ns3
 /**
  * @ingroup nishioka
  *
- * @brief Helper class for creating and managing NishiokaHeader in packets
- * and installing NishiokaStack on nodes
+ * @brief Helper for NishiokaHeader packets and NishiokaStack installation.
  *
- * This helper class provides convenient methods for:
+ * Node layout (mirrors ZigbeeHelper + LrWpanHelper):
+ * - LrWpanHelper installs LrWpanNetDevice (PHY+MAC) on each Node.
+ * - NishiokaHelper::Install attaches NishiokaStack on the same Node and binds
+ *   it to that NetDevice so MAC and NishiokaNwk communicate.
+ *
+ * This helper also provides:
  * - Creating packets with NishiokaHeader
  * - Extracting NishiokaHeader from packets
  * - Setting routing information (battery, LQI, hops) in headers
- * - Managing packet creation for multi-hop routing scenarios
- * - Installing NishiokaStack on nodes with automatic setup
+ * - ConfigureMac() for common MAC PIB settings on installed stacks
  */
 class NishiokaHelper
 {
@@ -91,6 +94,9 @@ class NishiokaHelper
     /**
      * Extract NishiokaHeader from a packet
      *
+     * Address modes are inferred by deserializing candidate (dst, src) mode pairs and
+     * accepting the first pair whose round-trip serialization matches the wire bytes.
+     *
      * @param packet The packet containing NishiokaHeader
      * @param header Reference to store the extracted header
      * @param data Reference to store the extracted payload data
@@ -113,10 +119,11 @@ class NishiokaHelper
 
     /**
      * Update routing information in an existing packet
-     * Creates a new packet with updated header information
+     * Creates a new packet with updated header information. Preserves destination
+     * addressing, frame type, and sequence number from the original header.
      *
      * @param packet Original packet
-     * @param newSrcAddr New source address
+     * @param newSrcAddr New source address (short)
      * @param newBattery New battery level
      * @param newLqi New LQI
      * @param newHops New hop count
@@ -129,9 +136,27 @@ class NishiokaHelper
                                    uint8_t newHops);
 
     /**
-     * Get the next sequence number (auto-incremented)
+     * Same as UpdateRoutingInfo(Mac16Address, ...) but sets a 64-bit source address.
      *
-     * @return Next sequence number
+     * @param packet Original packet
+     * @param newSrcAddr New source address (extended)
+     * @param newBattery New battery level
+     * @param newLqi New LQI
+     * @param newHops New hop count
+     * @return New packet with updated header
+     */
+    Ptr<Packet> UpdateRoutingInfo(Ptr<Packet> packet,
+                                   Mac64Address newSrcAddr,
+                                   uint8_t newBattery,
+                                   uint8_t newLqi,
+                                   uint8_t newHops);
+
+    /**
+     * Peek at the internal sequence counter without advancing it.
+     * The next CreatePacket call that relies on automatic numbering uses this value;
+     * see ResetSeqNum() to clear the counter.
+     *
+     * @return Current sequence counter (does not increment)
      */
     uint8_t GetNextSeqNum();
 
@@ -141,31 +166,41 @@ class NishiokaHelper
     void ResetSeqNum();
 
     /**
-     * Install NishiokaStack on top of existing NetDevices.
+     * Install NishiokaStack on top of existing LrWpan NetDevices.
      *
-     * This function creates nodes, installs NetDevices, sets up mobility models,
-     * and installs NishiokaStack for each device in the container.
+     * Each NetDevice must already be attached to a Node (for example by
+     * LrWpanHelper::Install or UartLrWpanHelper::Install). The helper creates
+     * one NishiokaStack per device, aggregates it on the same Node, and connects
+     * the stack to the device's MAC (IEEE 802.15.4) for Nishioka NWK processing.
      *
-     * @param netDevices Container of NetDevices (e.g., UartLrWpanNetDevice)
-     * @param positions Vector of positions for each device (must match device count)
+     * Typical usage:
+     * @code
+     *   NodeContainer nodes;
+     *   nodes.Create (n);
+     *   LrWpanHelper lrWpanHelper;
+     *   NetDeviceContainer devices = lrWpanHelper.Install (nodes);
+     *   NishiokaHelper nishiokaHelper;
+     *   NishiokaStackContainer stacks = nishiokaHelper.Install (devices);
+     * @endcode
+     *
+     * @param netDevices Container of NetDevices (LrWpanNetDevice or UartLrWpanNetDevice)
+     * @return Container with the newly created NishiokaStacks
+     */
+    nishioka::NishiokaStackContainer Install(NetDeviceContainer netDevices);
+
+    /**
+     * Install NishiokaStack and attach a ConstantPositionMobilityModel to each node.
+     *
+     * Same as Install(NetDeviceContainer) but also sets node positions. PHY mobility
+     * for simulated LrWpanNetDevice should still be configured separately (e.g. via
+     * LrWpanHelper or dev->GetPhy()->SetMobility).
+     *
+     * @param netDevices Container of NetDevices already attached to nodes
+     * @param positions Position for each device/node (size must equal device count)
      * @return Container with the newly created NishiokaStacks
      */
     nishioka::NishiokaStackContainer Install(NetDeviceContainer netDevices,
                                               const std::vector<Vector>& positions);
-
-    /**
-     * Install NishiokaStack on top of existing NetDevices with nodes.
-     *
-     * This function installs NishiokaStack on devices that are already
-     * attached to nodes. Mobility models are set up if positions are provided.
-     *
-     * @param netDevices Container of NetDevices already attached to nodes
-     * @param positions Vector of positions for each device (optional, can be empty)
-     * @return Container with the newly created NishiokaStacks
-     */
-    nishioka::NishiokaStackContainer Install(NetDeviceContainer netDevices,
-                                              const std::vector<Vector>& positions,
-                                              NodeContainer nodes);
 
     /**
      * Set an attribute on each NishiokaStack created by Install.

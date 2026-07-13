@@ -5,15 +5,26 @@ build_lib(
     model/data-payload-header.cc
     model/nishioka-stack.cc
     model/nishioka-nwk.cc
+    model/nishioka-rpl-payload-header.cc
+    model/nishioka-rpl-tables.cc
+    model/nishioka-rpl-routing.cc
+    model/nishioka-rpl-nwk.cc
     helper/nishioka-helper.cc
     helper/nishioka-stack-container.cc
+    helper/nishioka-rpl-helper.cc
   HEADER_FILES
     model/nishioka-header.h
     model/data-payload-header.h
     model/nishioka-stack.h
     model/nishioka-nwk.h
+    model/nishioka-rpl-fields.h
+    model/nishioka-rpl-payload-header.h
+    model/nishioka-rpl-tables.h
+    model/nishioka-rpl-routing.h
+    model/nishioka-rpl-nwk.h
     helper/nishioka-helper.h
     helper/nishioka-stack-container.h
+    helper/nishioka-rpl-helper.h
   LIBRARIES_TO_LINK
     ${libspectrum}
     ${liblr-wpan}

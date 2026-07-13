@@ -10,8 +10,9 @@
 #ifndef NISHIOKA_STACK_H
 #define NISHIOKA_STACK_H
 
-#include "ns3/lr-wpan-net-device.h"
-#include "ns3/node.h"
+#include "nishioka-nwk.h"
+
+#include "ns3/lr-wpan-mac-base.h"
 #include "ns3/net-device.h"
 
 #include <stdint.h>
@@ -24,18 +25,21 @@ class Node;
 namespace nishioka
 {
 
-class NishiokaNwk;
-
 /**
  * @ingroup nishioka
  *
- * @brief Protocol stack interface for Nishioka module
+ * @brief Nishioka protocol stack to device interface.
  *
- * This class is an encapsulating class representing the protocol stack for
- * the Nishioka module. It provides access to the underlying MAC layer and
- * NetDevice.
+ * This class is an encapsulating class representing the Nishioka protocol stack
+ * on a node. A node is typically composed of:
+ * - One LrWpanNetDevice (PHY + MAC, installed via LrWpanHelper), and
+ * - One NishiokaStack (NWK layer, installed via NishiokaHelper).
  *
- * This is a simplified version without NWK layer for basic testing.
+ * NishiokaStack connects the NetDevice's MAC (LrWpanMacBase) to NishiokaNwk,
+ * which implements the Nishioka network-layer protocol. Applications may use
+ * GetNwk() for routing and protocol primitives, or GetMac() for direct
+ * IEEE 802.15.4 access (callbacks set after stack initialization override
+ * the default MAC-to-NWK hooks).
  */
 class NishiokaStack : public Object
 {

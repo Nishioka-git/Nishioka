@@ -33,6 +33,56 @@ using namespace ns3::nishioka;
 // Global variables for statistics
 uint32_t g_txCount = 0;
 uint32_t g_rxCount = 0;
+Ptr<NishiokaStack> g_stack0 = nullptr;  // For delayed packet transmission
+Mac16Address g_dstAddr;
+
+// Forward declaration
+static void SendPacket(Ptr<NishiokaStack> stack, Mac16Address dstAddr);
+
+/**
+ * Callback function for PAN coordinator start confirmation
+ */
+static void
+StartConfirm(MlmeStartConfirmParams params)
+{
+    std::cout << Simulator::Now().As(Time::S) << " [PAN START CONFIRM] Status: " 
+              << static_cast<int>(params.m_status) << std::endl;
+    if (params.m_status == MacStatus::SUCCESS)
+    {
+        std::cout << "  PAN coordinator started successfully\n" << std::endl;
+        // Schedule packet transmission after PAN is ready
+        if (g_stack0)
+        {
+            Simulator::Schedule(Seconds(0.5), &SendPacket, g_stack0, g_dstAddr);
+        }
+    }
+    else
+    {
+        std::cout << "  PAN coordinator start failed!\n" << std::endl;
+    }
+}
+
+/**
+ * Callback function for packet transmission confirmation
+ */
+static void
+McpsConfirm(const McpsDataConfirmParams params)
+{
+    std::cout << Simulator::Now().As(Time::S) << " [TX CONFIRM] Status: " 
+              << static_cast<int>(params.m_status);
+    if (params.m_status == MacStatus::SUCCESS)
+    {
+        std::cout << " (SUCCESS)" << std::endl;
+    }
+    else if (params.m_status == MacStatus::NO_ACK)
+    {
+        std::cout << " (NO_ACK - ACK not received)" << std::endl;
+    }
+    else
+    {
+        std::cout << " (ERROR)" << std::endl;
+    }
+}
 
 /**
  * Callback function for packet reception (MAC layer callback)
@@ -94,10 +144,13 @@ SendPacket(Ptr<NishiokaStack> stack, Mac16Address dstAddr)
     {
         McpsDataRequestParams params;
         params.m_dstPanId = 0xCAFE;
+        params.m_srcAddrMode = SHORT_ADDR;  // 送信元アドレスモードを明示的に設定
         params.m_dstAddrMode = SHORT_ADDR;
         params.m_dstAddr = dstAddr;
         params.m_msduHandle = 0;
-        params.m_txOptions = TX_OPTION_NONE;
+        // Try without ACK first to see if packet is received
+        // If it works, we can enable ACK later for reliability
+        params.m_txOptions = TX_OPTION_NONE;  // No ACK required (simpler for testing)
 
         mac->McpsDataRequest(params, packet);
         g_txCount++;
@@ -172,26 +225,16 @@ main(int argc, char* argv[])
 
     std::cout << "Installed LrWpanNetDevices\n" << std::endl;
 
-    // Create and install NishiokaStack
-    Ptr<NishiokaStack> stack0 = CreateObject<NishiokaStack>();
-    Ptr<NishiokaStack> stack1 = CreateObject<NishiokaStack>();
+    // Install NishiokaStack on each LrWpanNetDevice (same node as the device)
+    NishiokaHelper helper;
+    NishiokaStackContainer stacks = helper.Install(devices);
 
-    stack0->SetNetDevice(dev0);
-    stack1->SetNetDevice(dev1);
-
-    nodes.Get(0)->AggregateObject(stack0);
-    nodes.Get(1)->AggregateObject(stack1);
-
-    // Note: Initialize() is called automatically by ns-3 when simulation starts
-    // No need to call it explicitly here
+    Ptr<NishiokaStack> stack0 = stacks.Get(0);
+    Ptr<NishiokaStack> stack1 = stacks.Get(1);
 
     std::cout << "Installed NishiokaStack on both nodes\n" << std::endl;
 
     // Configure MAC layer settings using helper
-    NishiokaHelper helper;
-    NishiokaStackContainer stacks;
-    stacks.Add(stack0);
-    stacks.Add(stack1);
 
     // Set MAC addresses and PAN ID using helper
     std::vector<Mac16Address> addresses;
@@ -209,6 +252,38 @@ main(int argc, char* argv[])
     std::cout << "  Node 0: Address " << dev0->GetMac()->GetShortAddress() << "\n";
     std::cout << "  Node 1: Address " << dev1->GetMac()->GetShortAddress() << "\n" << std::endl;
 
+    // Set up PAN association for LrWpan communication
+    // Node 0 acts as coordinator, Node 1 as end device
+    // Manual association: Set Node 1 to be associated with Node 0 (coordinator)
+    dev1->GetMac()->SetAssociatedCoor(Mac16Address("00:01"));
+    std::cout << "Set up PAN association: Node 1 associated with Node 0 (coordinator)\n" << std::endl;
+
+    // Set up PAN start confirmation callback
+    dev0->GetMac()->SetMlmeStartConfirmCallback(MakeCallback(&StartConfirm));
+
+    // Start PAN coordinator (Node 0) - this enables beacon transmission
+    // For non-beacon mode, we can use a simple start request
+    MlmeStartRequestParams startParams;
+    startParams.m_panCoor = true;
+    startParams.m_PanId = 0xCAFE;
+    startParams.m_logCh = 0xD;
+    startParams.m_logChPage = 0;
+    startParams.m_bcnOrd = 15;  // Non-beacon mode (15 = no beacons)
+    startParams.m_sfrmOrd = 15; // Non-beacon mode
+    startParams.m_battLifeExt = false;
+    startParams.m_coorRealgn = false;
+
+    // Store stack and destination for delayed transmission
+    g_stack0 = stack0;
+    g_dstAddr = Mac16Address("00:02");
+
+    // Schedule PAN start - packet transmission will be scheduled after PAN is ready
+    Simulator::Schedule(Seconds(0.1),
+                       &LrWpanMac::MlmeStartRequest,
+                       dev0->GetMac(),
+                       startParams);
+    std::cout << "Scheduled PAN coordinator start at 0.1 seconds\n" << std::endl;
+
     // Set up routing in NWK layer (example: if node 0 wants to send to node 1 via node 2)
     // For this simple example, we set direct routes
     Ptr<NishiokaNwk> nwk0 = stack0->GetNwk();
@@ -224,20 +299,24 @@ main(int argc, char* argv[])
 
     std::cout << "Routing table size: " << nwk0->GetRouteCount() << " routes\n" << std::endl;
 
-    // Set up data indication callback on receiver (MAC layer callback)
+    // Set up callbacks on both nodes
+    Ptr<LrWpanMacBase> mac0 = stack0->GetMac();
     Ptr<LrWpanMacBase> mac1 = stack1->GetMac();
+    
+    // Set transmission confirmation callback on sender
+    mac0->SetMcpsDataConfirmCallback(MakeCallback(&McpsConfirm));
+    
+    // Set data indication callback on receiver
     mac1->SetMcpsDataIndicationCallback(MakeCallback(&McpsIndication));
+    
+    // Also set on sender in case of bidirectional communication
+    mac0->SetMcpsDataIndicationCallback(MakeCallback(&McpsIndication));
 
-    std::cout << "Set up data indication callback\n" << std::endl;
+    std::cout << "Set up data indication and confirmation callbacks\n" << std::endl;
 
-    // Schedule packet transmission
-    Simulator::ScheduleWithContext(nodes.Get(0)->GetId(),
-                                   Seconds(1.0),
-                                   &SendPacket,
-                                   stack0,
-                                   Mac16Address("00:02"));
-
-    std::cout << "Scheduled packet transmission at 1.0 seconds\n" << std::endl;
+    // Note: Packet transmission will be scheduled after PAN coordinator start is confirmed
+    // (see StartConfirm callback)
+    std::cout << "Packet transmission will be scheduled after PAN coordinator is ready\n" << std::endl;
 
     // Run simulation
     std::cout << "Starting simulation...\n" << std::endl;
