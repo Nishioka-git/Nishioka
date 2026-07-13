@@ -13,6 +13,7 @@
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/output-stream-wrapper.h"
+#include "ns3/trace-source-accessor.h"
 
 namespace ns3
 {
@@ -44,7 +45,15 @@ Rpl::GetTypeId()
                           "True if this node acts as the DODAG root.",
                           BooleanValue(false),
                           MakeBooleanAccessor(&Rpl::m_isRoot),
-                          MakeBooleanChecker());
+                          MakeBooleanChecker())
+            .AddTraceSource("RouteOutputProbe",
+                            "Fired when RouteOutput is invoked (success or NOROUTETOHOST).",
+                            MakeTraceSourceAccessor(&Rpl::m_routeOutputTrace),
+                            "ns3::Rpl::RouteProbeTracedCallback")
+            .AddTraceSource("RouteInputProbe",
+                            "Fired when RouteInput is invoked for unicast forwarding.",
+                            MakeTraceSourceAccessor(&Rpl::m_routeInputTrace),
+                            "ns3::Rpl::RouteProbeTracedCallback");
     return tid;
 }
 
@@ -72,13 +81,6 @@ Rpl::SetIpv6(Ptr<Ipv6> ipv6)
     m_ipv6 = ipv6;
 }
 
-int64_t
-Rpl::AssignStreams(int64_t stream)
-{
-    NS_LOG_FUNCTION(this << stream);
-    return 0;
-}
-
 Ptr<Ipv6Route>
 Rpl::RouteOutput(Ptr<Packet> p,
                  const Ipv6Header& header,
@@ -91,10 +93,13 @@ Rpl::RouteOutput(Ptr<Packet> p,
     if (rtentry)
     {
         sockerr = Socket::ERROR_NOTERROR;
+        m_routeOutputTrace(p, header.GetDestination(), true, sockerr);
     }
     else
     {
         sockerr = Socket::ERROR_NOROUTETOHOST;
+        m_routeOutputTrace(p, header.GetDestination(), false, sockerr);
+        NS_LOG_WARN("RouteOutput FAIL dst=" << header.GetDestination() << " NOROUTETOHOST");
     }
     return rtentry;
 }
@@ -121,6 +126,7 @@ Rpl::RouteInput(Ptr<const Packet> p,
 
     if (header.GetDestination().IsLinkLocal() || header.GetSource().IsLinkLocal())
     {
+        m_routeInputTrace(p, header.GetDestination(), false, Socket::ERROR_NOROUTETOHOST);
         if (!ecb.IsNull())
         {
             ecb(p, header, Socket::ERROR_NOROUTETOHOST);
@@ -130,6 +136,7 @@ Rpl::RouteInput(Ptr<const Packet> p,
 
     if (!m_ipv6->IsForwarding(iif))
     {
+        m_routeInputTrace(p, header.GetDestination(), false, Socket::ERROR_NOROUTETOHOST);
         if (!ecb.IsNull())
         {
             ecb(p, header, Socket::ERROR_NOROUTETOHOST);
@@ -140,10 +147,13 @@ Rpl::RouteInput(Ptr<const Packet> p,
     Ptr<Ipv6Route> rtentry = Lookup(header.GetDestination(), false, nullptr);
     if (rtentry)
     {
+        m_routeInputTrace(p, header.GetDestination(), true, Socket::ERROR_NOTERROR);
         ucb(idev, rtentry, p, header);
         return true;
     }
 
+    m_routeInputTrace(p, header.GetDestination(), false, Socket::ERROR_NOROUTETOHOST);
+    NS_LOG_WARN("RouteInput FAIL dst=" << header.GetDestination() << " NOROUTETOHOST");
     return false;
 }
 
@@ -183,6 +193,12 @@ Rpl::NotifyAddAddress(uint32_t interface, Ipv6InterfaceAddress address)
     {
         return;
     }
+
+    if (address.GetScope() == Ipv6InterfaceAddress::GLOBAL)
+    {
+        Ipv6Address networkAddress = address.GetAddress().CombinePrefix(address.GetPrefix());
+        AddNetworkRouteTo(networkAddress, address.GetPrefix(), Ipv6Address::GetZero(), interface);
+    }
 }
 
 void
@@ -193,6 +209,12 @@ Rpl::NotifyRemoveAddress(uint32_t interface, Ipv6InterfaceAddress address)
     if (!m_ipv6->IsUp(interface))
     {
         return;
+    }
+
+    if (address.GetScope() == Ipv6InterfaceAddress::GLOBAL)
+    {
+        Ipv6Address networkAddress = address.GetAddress().CombinePrefix(address.GetPrefix());
+        RemoveNetworkRoute(networkAddress, address.GetPrefix());
     }
 }
 
@@ -245,12 +267,6 @@ Rpl::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit unit) const
     }
 }
 
-std::set<uint32_t>
-Rpl::GetInterfaceExclusions() const
-{
-    return m_interfaceExclusions;
-}
-
 void
 Rpl::SetInterfaceExclusions(std::set<uint32_t> exceptions)
 {
@@ -270,12 +286,6 @@ Rpl::SetRoot(bool isRoot)
 {
     NS_LOG_FUNCTION(this << isRoot);
     m_isRoot = isRoot;
-}
-
-bool
-Rpl::IsRoot() const
-{
-    return m_isRoot;
 }
 
 Ptr<Ipv6Route>

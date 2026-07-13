@@ -11,6 +11,7 @@
 
 #include "ns3/ipv6-routing-protocol.h"
 #include "ns3/ipv6.h"
+#include "ns3/traced-callback.h"
 
 #include <list>
 #include <set>
@@ -79,15 +80,23 @@ class Rpl : public Ipv6RoutingProtocol
     void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
                            Time::Unit unit = Time::S) const override;
 
-    int64_t AssignStreams(int64_t stream);
-
-    std::set<uint32_t> GetInterfaceExclusions() const;
     void SetInterfaceExclusions(std::set<uint32_t> exceptions);
 
     void AddDefaultRouteTo(Ipv6Address nextHop, uint32_t interface);
 
     void SetRoot(bool isRoot);
-    bool IsRoot() const;
+
+    /**
+     * TracedCallback signature for RouteOutput / RouteInput probes.
+     * @param packet packet being routed (may be null for RouteOutput)
+     * @param dst destination address
+     * @param success true if a route was found / packet was forwarded
+     * @param errno socket errno (RouteOutput) or ERROR_NOROUTETOHOST on input failure
+     */
+    typedef void (*RouteProbeTracedCallback)(Ptr<const Packet> packet,
+                                             Ipv6Address dst,
+                                             bool success,
+                                             Socket::SocketErrno sockerr);
 
   protected:
     void DoDispose() override;
@@ -111,6 +120,9 @@ class Rpl : public Ipv6RoutingProtocol
     bool m_isRoot;
     std::set<uint32_t> m_interfaceExclusions;
     bool m_initialized;
+
+    TracedCallback<Ptr<const Packet>, Ipv6Address, bool, Socket::SocketErrno> m_routeOutputTrace;
+    TracedCallback<Ptr<const Packet>, Ipv6Address, bool, Socket::SocketErrno> m_routeInputTrace;
 };
 
 } // namespace ns3

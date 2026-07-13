@@ -11,7 +11,88 @@
 using namespace ns3;
 using namespace ns3::lrwpan;
 
-static void
+namespace
+{
+
+uint32_t g_routeOutputOk = 0;
+uint32_t g_routeOutputFail = 0;
+
+std::string
+SockErrToString(Socket::SocketErrno err)
+{
+    switch (err)
+    {
+    case Socket::ERROR_NOTERROR:
+        return "ERROR_NOTERROR";
+    case Socket::ERROR_NOROUTETOHOST:
+        return "ERROR_NOROUTETOHOST";
+    default:
+        return "errno=" + std::to_string(static_cast<int>(err));
+    }
+}
+
+void
+RouteOutputProbe(std::string context,
+                 Ptr<const Packet> /*packet*/,
+                 Ipv6Address dst,
+                 bool success,
+                 Socket::SocketErrno sockerr)
+{
+    if (success)
+    {
+        ++g_routeOutputOk;
+        std::cout << Simulator::Now().As(Time::S) << " [RPL RouteOutput OK] " << context
+                  << " dst=" << dst << "\n";
+    }
+    else
+    {
+        ++g_routeOutputFail;
+        std::cout << Simulator::Now().As(Time::S) << " [RPL RouteOutput FAIL] " << context
+                  << " dst=" << dst << " " << SockErrToString(sockerr) << "\n";
+    }
+}
+
+Ptr<Rpl>
+GetRpl(Ptr<Node> node)
+{
+    Ptr<Ipv6> ipv6 = node->GetObject<Ipv6>();
+    Ptr<Rpl> rpl = DynamicCast<Rpl>(ipv6->GetRoutingProtocol());
+    if (rpl)
+    {
+        return rpl;
+    }
+    Ptr<Ipv6ListRouting> list = DynamicCast<Ipv6ListRouting>(ipv6->GetRoutingProtocol());
+    if (!list)
+    {
+        return nullptr;
+    }
+    for (uint32_t i = 0; i < list->GetNRoutingProtocols(); ++i)
+    {
+        int16_t priority = 0;
+        rpl = DynamicCast<Rpl>(list->GetRoutingProtocol(i, priority));
+        if (rpl)
+        {
+            return rpl;
+        }
+    }
+    return nullptr;
+}
+
+void
+PrintRplTables(NodeContainer nodes)
+{
+    Ptr<OutputStreamWrapper> stream = Create<OutputStreamWrapper>(&std::cout);
+    for (uint32_t i = 0; i < nodes.GetN(); ++i)
+    {
+        Ptr<Rpl> rpl = GetRpl(nodes.Get(i));
+        if (rpl)
+        {
+            rpl->PrintRoutingTable(stream);
+        }
+    }
+}
+
+void
 DataSentMacConfirm(Ptr<LrWpanNetDevice> device, McpsDataConfirmParams params)
 {
     if (params.m_status == MacStatus::SUCCESS)
@@ -20,6 +101,8 @@ DataSentMacConfirm(Ptr<LrWpanNetDevice> device, McpsDataConfirmParams params)
                   << " | Transmission successfully sent\n";
     }
 }
+
+} // namespace
 
 int
 main(int argc, char** argv)
@@ -30,12 +113,11 @@ main(int argc, char** argv)
     cmd.AddValue("verbose", "turn on log components", verbose);
     cmd.Parse(argc, argv);
 
+    LogComponentEnable("Rpl", LOG_LEVEL_WARN);
     if (verbose)
     {
         LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC | LOG_PREFIX_NODE));
         LogComponentEnable("LrWpanMac", LOG_LEVEL_INFO);
-        LogComponentEnable("LrWpanCsmaCa", LOG_LEVEL_INFO);
-        LogComponentEnable("LrWpanHelper", LOG_LEVEL_ALL);
         LogComponentEnable("Ping", LOG_LEVEL_INFO);
         LogComponentEnable("Rpl", LOG_LEVEL_LOGIC);
     }
@@ -58,7 +140,6 @@ main(int argc, char** argv)
                                   UintegerValue(3),
                                   "LayoutType",
                                   StringValue("RowFirst"));
-    mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
     mobility.Install(nodes);
 
     LrWpanHelper lrWpanHelper;
@@ -68,7 +149,6 @@ main(int argc, char** argv)
 
     Ptr<LrWpanNetDevice> dev1 = lrwpanDevices.Get(0)->GetObject<LrWpanNetDevice>();
     Ptr<LrWpanNetDevice> dev2 = lrwpanDevices.Get(1)->GetObject<LrWpanNetDevice>();
-
     dev1->GetMac()->SetMcpsDataConfirmCallback(MakeBoundCallback(&DataSentMacConfirm, dev1));
     dev2->GetMac()->SetMcpsDataConfirmCallback(MakeBoundCallback(&DataSentMacConfirm, dev2));
 
@@ -80,7 +160,6 @@ main(int argc, char** argv)
     params.m_bcnOrd = 14;
     params.m_sfrmOrd = 13;
     params.m_logCh = 11;
-
     Simulator::ScheduleWithContext(dev1->GetNode()->GetId(),
                                    Seconds(0),
                                    &LrWpanMac::MlmeStartRequest,
@@ -88,16 +167,17 @@ main(int argc, char** argv)
                                    params);
 
     RplHelper rpl;
-
     InternetStackHelper internetv6;
     internetv6.SetRoutingHelper(rpl);
     internetv6.Install(nodes);
 
-    Ptr<Rpl> rootRpl = DynamicCast<Rpl>(nodes.Get(0)->GetObject<Ipv6>()->GetRoutingProtocol());
-    if (rootRpl)
-    {
-        rootRpl->SetRoot(true);
-    }
+    Ptr<Rpl> rpl0 = GetRpl(nodes.Get(0));
+    Ptr<Rpl> rpl1 = GetRpl(nodes.Get(1));
+    NS_ABORT_MSG_UNLESS(rpl0 && rpl1, "RPL routing protocol was not installed");
+    rpl0->SetRoot(true);
+
+    rpl0->TraceConnect("RouteOutputProbe", "Node0", MakeCallback(&RouteOutputProbe));
+    rpl1->TraceConnect("RouteOutputProbe", "Node1", MakeCallback(&RouteOutputProbe));
 
     SixLowPanHelper sixlowpan;
     NetDeviceContainer devices = sixlowpan.Install(lrwpanDevices);
@@ -106,16 +186,19 @@ main(int argc, char** argv)
     ipv6.SetBase(Ipv6Address("2001:2::"), Ipv6Prefix(64));
     Ipv6InterfaceContainer deviceInterfaces = ipv6.Assign(devices);
 
-    uint32_t packetSize = 16;
-    uint32_t maxPacketCount = 5;
-    Time interPacketInterval = Seconds(1);
-    PingHelper ping(deviceInterfaces.GetAddress(1, 1));
+    Ipv6Address peerAddress = deviceInterfaces.GetAddress(1, 1);
+    // Deliberately unreachable destination (not covered by 2001:2::/64)
+    Ipv6Address pingTarget("2001:db8:bad::1");
 
-    ping.SetAttribute("Count", UintegerValue(maxPacketCount));
-    ping.SetAttribute("Interval", TimeValue(interPacketInterval));
-    ping.SetAttribute("Size", UintegerValue(packetSize));
+    std::cout << "Ping unreachable " << pingTarget << " (peer is " << peerAddress << ")\n"
+              << "Expected: [RPL RouteOutput FAIL] ERROR_NOROUTETOHOST\n\n";
+    PrintRplTables(nodes);
+
+    PingHelper ping(pingTarget);
+    ping.SetAttribute("Count", UintegerValue(1));
+    ping.SetAttribute("Interval", TimeValue(Seconds(1.)));
+    ping.SetAttribute("Size", UintegerValue(16));
     ApplicationContainer apps = ping.Install(nodes.Get(0));
-
     apps.Start(Seconds(2));
     apps.Stop(Seconds(7));
 
@@ -124,9 +207,19 @@ main(int argc, char** argv)
     lrWpanHelper.EnablePcapAll(std::string("Ping-6LoW-lr-wpan-beacon-rpl"), true);
 
     Simulator::Stop(Seconds(7));
-
     Simulator::Run();
-    Simulator::Destroy();
 
+    std::cout << "\n=== RPL probe summary ===\n"
+              << "RouteOutput OK=" << g_routeOutputOk << " FAIL=" << g_routeOutputFail << "\n";
+    if (g_routeOutputFail > 0)
+    {
+        std::cout << "PASS: RPL RouteOutput reported NOROUTETOHOST (RPL is consulted).\n";
+    }
+    else
+    {
+        std::cout << "UNEXPECTED: no RouteOutput FAIL. Is RPL actually used?\n";
+    }
+
+    Simulator::Destroy();
     return 0;
 }

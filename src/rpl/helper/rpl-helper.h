@@ -3,7 +3,6 @@
 
 #include "ns3/ipv6-routing-helper.h"
 
-#include "ns3/node-container.h"
 #include "ns3/node.h"
 #include "ns3/object-factory.h"
 
@@ -33,7 +32,6 @@ class RplHelper : public Ipv6RoutingHelper
     RplHelper* Copy() const override;
     Ptr<Ipv6RoutingProtocol> Create(Ptr<Node> node) const override;
     void Set(std::string name, const AttributeValue& value);
-    int64_t AssignStreams(NodeContainer c, int64_t stream);
 
     void SetDefaultRouter(Ptr<Node> node, Ipv6Address nextHop, uint32_t interface);
     void ExcludeInterface(Ptr<Node> node, uint32_t interface);
