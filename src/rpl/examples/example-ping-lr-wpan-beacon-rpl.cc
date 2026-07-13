@@ -4,6 +4,7 @@
 #include "ns3/lr-wpan-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/propagation-module.h"
+#include "ns3/rpl-header.h"
 #include "ns3/rpl-module.h"
 #include "ns3/sixlowpan-module.h"
 #include "ns3/spectrum-module.h"

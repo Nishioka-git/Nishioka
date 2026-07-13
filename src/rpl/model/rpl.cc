@@ -7,6 +7,7 @@
  */
 
 #include "rpl.h"
+#include "rpl-header.h"
 
 #include "ns3/boolean.h"
 #include "ns3/ipv6-route.h"
