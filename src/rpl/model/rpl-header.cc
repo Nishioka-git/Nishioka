@@ -1,3 +1,15 @@
+/*
+ * Copyright (c) 2014 Universita' di Firenze, Italy
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ *
+ * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
+ *
+ * Implementation of RPL Base Objects (\RFC{6550} Section 6).
+ * Unused Flags/Reserved fields: "MUST be initialized to zero by the
+ * sender and MUST be ignored by the receiver."
+ */
+
 #include "rpl-header.h"
 
 #include "ns3/log.h"
@@ -8,132 +20,116 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("RplHeader");
 
 /*
- * RplDisHeader
+ * DisBaseObjectHeader — \RFC{6550} Section 6.2 / 6.2.1 (Figure 13)
  */
 
-NS_OBJECT_ENSURE_REGISTERED(RplDisHeader);
+NS_OBJECT_ENSURE_REGISTERED(DisBaseObjectHeader);
 
-RplDisHeader::RplDisHeader()
-    : m_flags(0),
-      m_reserved(0)
+DisBaseObjectHeader::DisBaseObjectHeader()
 {
 }
 
 TypeId
-RplDisHeader::GetTypeId()
+DisBaseObjectHeader::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::RplDisHeader")
+    static TypeId tid = TypeId("ns3::DisBaseObjectHeader")
                             .SetParent<Header>()
                             .SetGroupName("Rpl")
-                            .AddConstructor<RplDisHeader>();
+                            .AddConstructor<DisBaseObjectHeader>();
     return tid;
 }
 
 TypeId
-RplDisHeader::GetInstanceTypeId() const
+DisBaseObjectHeader::GetInstanceTypeId() const
 {
     return GetTypeId();
 }
 
 uint32_t
-RplDisHeader::GetSerializedSize() const
+DisBaseObjectHeader::GetSerializedSize() const
 {
     return 2;
 }
 
 void
-RplDisHeader::Serialize(Buffer::Iterator start) const
+DisBaseObjectHeader::Serialize(Buffer::Iterator start) const
 {
     Buffer::Iterator i = start;
-    i.WriteU8(m_flags);
-    i.WriteU8(m_reserved);
+    i.WriteU8(0); // Flags
+    i.WriteU8(0); // Reserved
 }
 
 uint32_t
-RplDisHeader::Deserialize(Buffer::Iterator start)
+DisBaseObjectHeader::Deserialize(Buffer::Iterator start)
 {
     Buffer::Iterator i = start;
-    m_flags = i.ReadU8();
-    m_reserved = i.ReadU8();
+    i.ReadU8();
+    i.ReadU8();
     return GetSerializedSize();
 }
 
 void
-RplDisHeader::Print(std::ostream& os) const
+DisBaseObjectHeader::Print(std::ostream& os) const
 {
-    os << "DIS flags=0x" << std::hex << int(m_flags) << std::dec;
-}
-
-void
-RplDisHeader::SetFlags(uint8_t flags)
-{
-    m_flags = flags;
-}
-
-uint8_t
-RplDisHeader::GetFlags() const
-{
-    return m_flags;
+    os << "DIS Base Object";
 }
 
 std::ostream&
-operator<<(std::ostream& os, const RplDisHeader& h)
+operator<<(std::ostream& os, const DisBaseObjectHeader& h)
 {
     h.Print(os);
     return os;
 }
 
 /*
- * RplDioHeader
+ * DioBaseObjectHeader — \RFC{6550} Section 6.3 / 6.3.1 (Figure 14)
  */
 
-NS_OBJECT_ENSURE_REGISTERED(RplDioHeader);
+NS_OBJECT_ENSURE_REGISTERED(DioBaseObjectHeader);
 
-RplDioHeader::RplDioHeader()
-    : m_instanceId(0),
-      m_version(0),
+DioBaseObjectHeader::DioBaseObjectHeader()
+    : m_rplInstanceId(0),
+      m_versionNumber(0),
       m_rank(0xffff),
       m_gMopPrf(0),
       m_dtsn(0),
-      m_flags(0),
-      m_reserved(0),
       m_dodagId(Ipv6Address::GetZero())
 {
 }
 
 TypeId
-RplDioHeader::GetTypeId()
+DioBaseObjectHeader::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::RplDioHeader")
+    static TypeId tid = TypeId("ns3::DioBaseObjectHeader")
                             .SetParent<Header>()
                             .SetGroupName("Rpl")
-                            .AddConstructor<RplDioHeader>();
+                            .AddConstructor<DioBaseObjectHeader>();
     return tid;
 }
 
 TypeId
-RplDioHeader::GetInstanceTypeId() const
+DioBaseObjectHeader::GetInstanceTypeId() const
 {
     return GetTypeId();
 }
 
 uint32_t
-RplDioHeader::GetSerializedSize() const
+DioBaseObjectHeader::GetSerializedSize() const
 {
     return 24;
 }
 
 void
-RplDioHeader::Serialize(Buffer::Iterator start) const
+DioBaseObjectHeader::Serialize(Buffer::Iterator start) const
 {
     Buffer::Iterator i = start;
-    i.WriteU8(m_instanceId);
-    i.WriteU8(m_version);
+    i.WriteU8(m_rplInstanceId);
+    i.WriteU8(m_versionNumber);
     i.WriteHtonU16(m_rank);
-    i.WriteU8(m_gMopPrf);
+    i.WriteU8(m_gMopPrf & 0xbf); // clear reserved bit next to G
     i.WriteU8(m_dtsn);
-    i.WriteU8(m_flags);
-    i.WriteU8(m_reserved);
+    i.WriteU8(0); // Flags
+    i.WriteU8(0); // Reserved
 
     uint8_t buf[16];
     m_dodagId.Serialize(buf);
@@ -141,16 +137,16 @@ RplDioHeader::Serialize(Buffer::Iterator start) const
 }
 
 uint32_t
-RplDioHeader::Deserialize(Buffer::Iterator start)
+DioBaseObjectHeader::Deserialize(Buffer::Iterator start)
 {
     Buffer::Iterator i = start;
-    m_instanceId = i.ReadU8();
-    m_version = i.ReadU8();
+    m_rplInstanceId = i.ReadU8();
+    m_versionNumber = i.ReadU8();
     m_rank = i.ReadNtohU16();
-    m_gMopPrf = i.ReadU8();
+    m_gMopPrf = i.ReadU8() & 0xbf;
     m_dtsn = i.ReadU8();
-    m_flags = i.ReadU8();
-    m_reserved = i.ReadU8();
+    i.ReadU8(); // Flags
+    i.ReadU8(); // Reserved
 
     uint8_t buf[16];
     i.Read(buf, 16);
@@ -160,51 +156,55 @@ RplDioHeader::Deserialize(Buffer::Iterator start)
 }
 
 void
-RplDioHeader::Print(std::ostream& os) const
+DioBaseObjectHeader::Print(std::ostream& os) const
 {
-    os << "DIO instance=" << int(m_instanceId) << " ver=" << int(m_version)
-       << " rank=" << m_rank << " G=" << GetGrounded() << " MOP=" << int(GetMop())
-       << " Prf=" << int(GetPreference()) << " DTSN=" << int(m_dtsn) << " DODAGID=" << m_dodagId;
+    os << "DIO Base Object"
+       << " RPLInstanceID=" << int(m_rplInstanceId)
+       << " VersionNumber=" << int(m_versionNumber) << " Rank=" << m_rank
+       << " G=" << IsGrounded()
+       << " MOP=" << int(static_cast<uint8_t>(GetModeOfOperation()))
+       << " Prf=" << int(GetDodagPreference()) << " DTSN=" << int(m_dtsn)
+       << " DODAGID=" << m_dodagId;
 }
 
 void
-RplDioHeader::SetInstanceId(uint8_t instanceId)
+DioBaseObjectHeader::SetRplInstanceId(uint8_t rplInstanceId)
 {
-    m_instanceId = instanceId;
+    m_rplInstanceId = rplInstanceId;
 }
 
 uint8_t
-RplDioHeader::GetInstanceId() const
+DioBaseObjectHeader::GetRplInstanceId() const
 {
-    return m_instanceId;
+    return m_rplInstanceId;
 }
 
 void
-RplDioHeader::SetVersion(uint8_t version)
+DioBaseObjectHeader::SetVersionNumber(uint8_t versionNumber)
 {
-    m_version = version;
+    m_versionNumber = versionNumber;
 }
 
 uint8_t
-RplDioHeader::GetVersion() const
+DioBaseObjectHeader::GetVersionNumber() const
 {
-    return m_version;
+    return m_versionNumber;
 }
 
 void
-RplDioHeader::SetRank(uint16_t rank)
+DioBaseObjectHeader::SetRank(uint16_t rank)
 {
     m_rank = rank;
 }
 
 uint16_t
-RplDioHeader::GetRank() const
+DioBaseObjectHeader::GetRank() const
 {
     return m_rank;
 }
 
 void
-RplDioHeader::SetGrounded(bool grounded)
+DioBaseObjectHeader::SetGrounded(bool grounded)
 {
     if (grounded)
     {
@@ -217,125 +217,123 @@ RplDioHeader::SetGrounded(bool grounded)
 }
 
 bool
-RplDioHeader::GetGrounded() const
+DioBaseObjectHeader::IsGrounded() const
 {
     return (m_gMopPrf & 0x80) != 0;
 }
 
 void
-RplDioHeader::SetMop(uint8_t mop)
+DioBaseObjectHeader::SetModeOfOperation(ModeOfOperation mop)
 {
-    m_gMopPrf = (m_gMopPrf & 0x87) | ((mop & 0x07) << 3);
+    m_gMopPrf = (m_gMopPrf & 0x87) | ((static_cast<uint8_t>(mop) & 0x07) << 3);
 }
 
-uint8_t
-RplDioHeader::GetMop() const
+ModeOfOperation
+DioBaseObjectHeader::GetModeOfOperation() const
 {
-    return (m_gMopPrf >> 3) & 0x07;
+    return static_cast<ModeOfOperation>((m_gMopPrf >> 3) & 0x07);
 }
 
 void
-RplDioHeader::SetPreference(uint8_t preference)
+DioBaseObjectHeader::SetDodagPreference(uint8_t preference)
 {
     m_gMopPrf = (m_gMopPrf & 0xf8) | (preference & 0x07);
 }
 
 uint8_t
-RplDioHeader::GetPreference() const
+DioBaseObjectHeader::GetDodagPreference() const
 {
     return m_gMopPrf & 0x07;
 }
 
 void
-RplDioHeader::SetDtsn(uint8_t dtsn)
+DioBaseObjectHeader::SetDtsn(uint8_t dtsn)
 {
     m_dtsn = dtsn;
 }
 
 uint8_t
-RplDioHeader::GetDtsn() const
+DioBaseObjectHeader::GetDtsn() const
 {
     return m_dtsn;
 }
 
 void
-RplDioHeader::SetFlags(uint8_t flags)
-{
-    m_flags = flags;
-}
-
-uint8_t
-RplDioHeader::GetFlags() const
-{
-    return m_flags;
-}
-
-void
-RplDioHeader::SetDodagId(Ipv6Address dodagId)
+DioBaseObjectHeader::SetDodagId(Ipv6Address dodagId)
 {
     m_dodagId = dodagId;
 }
 
 Ipv6Address
-RplDioHeader::GetDodagId() const
+DioBaseObjectHeader::GetDodagId() const
 {
     return m_dodagId;
 }
 
 std::ostream&
-operator<<(std::ostream& os, const RplDioHeader& h)
+operator<<(std::ostream& os, const DioBaseObjectHeader& h)
 {
     h.Print(os);
     return os;
 }
 
 /*
- * RplDaoHeader
+ * DaoBaseObjectHeader — \RFC{6550} Section 6.4 / 6.4.1 (Figure 16)
  */
 
-NS_OBJECT_ENSURE_REGISTERED(RplDaoHeader);
+NS_OBJECT_ENSURE_REGISTERED(DaoBaseObjectHeader);
 
-RplDaoHeader::RplDaoHeader()
-    : m_instanceId(0),
-      m_flags(0),
-      m_reserved(0),
+DaoBaseObjectHeader::DaoBaseObjectHeader()
+    : m_rplInstanceId(0),
+      m_k(false),
+      m_d(false),
       m_daoSequence(0),
       m_dodagId(Ipv6Address::GetZero())
 {
 }
 
 TypeId
-RplDaoHeader::GetTypeId()
+DaoBaseObjectHeader::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::RplDaoHeader")
+    static TypeId tid = TypeId("ns3::DaoBaseObjectHeader")
                             .SetParent<Header>()
                             .SetGroupName("Rpl")
-                            .AddConstructor<RplDaoHeader>();
+                            .AddConstructor<DaoBaseObjectHeader>();
     return tid;
 }
 
 TypeId
-RplDaoHeader::GetInstanceTypeId() const
+DaoBaseObjectHeader::GetInstanceTypeId() const
 {
     return GetTypeId();
 }
 
 uint32_t
-RplDaoHeader::GetSerializedSize() const
+DaoBaseObjectHeader::GetSerializedSize() const
 {
-    return GetDodagIdPresent() ? 20 : 4;
+    return m_d ? 20 : 4;
 }
 
 void
-RplDaoHeader::Serialize(Buffer::Iterator start) const
+DaoBaseObjectHeader::Serialize(Buffer::Iterator start) const
 {
     Buffer::Iterator i = start;
-    i.WriteU8(m_instanceId);
-    i.WriteU8(m_flags);
-    i.WriteU8(m_reserved);
+    uint8_t kdFlags = 0;
+    if (m_k)
+    {
+        kdFlags |= 0x80;
+    }
+    if (m_d)
+    {
+        kdFlags |= 0x40;
+    }
+
+    i.WriteU8(m_rplInstanceId);
+    i.WriteU8(kdFlags);
+    i.WriteU8(0); // Reserved
     i.WriteU8(m_daoSequence);
 
-    if (GetDodagIdPresent())
+    if (m_d)
     {
         uint8_t buf[16];
         m_dodagId.Serialize(buf);
@@ -344,15 +342,17 @@ RplDaoHeader::Serialize(Buffer::Iterator start) const
 }
 
 uint32_t
-RplDaoHeader::Deserialize(Buffer::Iterator start)
+DaoBaseObjectHeader::Deserialize(Buffer::Iterator start)
 {
     Buffer::Iterator i = start;
-    m_instanceId = i.ReadU8();
-    m_flags = i.ReadU8();
-    m_reserved = i.ReadU8();
+    m_rplInstanceId = i.ReadU8();
+    uint8_t kdFlags = i.ReadU8();
+    m_k = (kdFlags & 0x80) != 0;
+    m_d = (kdFlags & 0x40) != 0;
+    i.ReadU8(); // Reserved
     m_daoSequence = i.ReadU8();
 
-    if (GetDodagIdPresent())
+    if (m_d)
     {
         uint8_t buf[16];
         i.Read(buf, 16);
@@ -363,158 +363,132 @@ RplDaoHeader::Deserialize(Buffer::Iterator start)
 }
 
 void
-RplDaoHeader::Print(std::ostream& os) const
+DaoBaseObjectHeader::Print(std::ostream& os) const
 {
-    os << "DAO instance=" << int(m_instanceId) << " K=" << GetAckRequired()
-       << " D=" << GetDodagIdPresent() << " seq=" << int(m_daoSequence);
-    if (GetDodagIdPresent())
+    os << "DAO Base Object"
+       << " RPLInstanceID=" << int(m_rplInstanceId) << " K=" << m_k << " D=" << m_d
+       << " DAOSequence=" << int(m_daoSequence);
+    if (m_d)
     {
         os << " DODAGID=" << m_dodagId;
     }
 }
 
 void
-RplDaoHeader::SetInstanceId(uint8_t instanceId)
+DaoBaseObjectHeader::SetRplInstanceId(uint8_t rplInstanceId)
 {
-    m_instanceId = instanceId;
+    m_rplInstanceId = rplInstanceId;
 }
 
 uint8_t
-RplDaoHeader::GetInstanceId() const
+DaoBaseObjectHeader::GetRplInstanceId() const
 {
-    return m_instanceId;
+    return m_rplInstanceId;
 }
 
 void
-RplDaoHeader::SetAckRequired(bool k)
+DaoBaseObjectHeader::SetK(bool k)
 {
-    if (k)
-    {
-        m_flags |= 0x80;
-    }
-    else
-    {
-        m_flags &= ~0x80;
-    }
+    m_k = k;
 }
 
 bool
-RplDaoHeader::GetAckRequired() const
+DaoBaseObjectHeader::GetK() const
 {
-    return (m_flags & 0x80) != 0;
+    return m_k;
 }
 
 void
-RplDaoHeader::SetDodagIdPresent(bool d)
+DaoBaseObjectHeader::SetD(bool d)
 {
-    if (d)
-    {
-        m_flags |= 0x40;
-    }
-    else
-    {
-        m_flags &= ~0x40;
-    }
+    m_d = d;
 }
 
 bool
-RplDaoHeader::GetDodagIdPresent() const
+DaoBaseObjectHeader::GetD() const
 {
-    return (m_flags & 0x40) != 0;
+    return m_d;
 }
 
 void
-RplDaoHeader::SetFlags(uint8_t flags)
+DaoBaseObjectHeader::SetDaoSequence(uint8_t daoSequence)
 {
-    // Preserve K and D bits
-    m_flags = (m_flags & 0xc0) | (flags & 0x3f);
+    m_daoSequence = daoSequence;
 }
 
 uint8_t
-RplDaoHeader::GetFlags() const
-{
-    return m_flags & 0x3f;
-}
-
-void
-RplDaoHeader::SetDaoSequence(uint8_t seq)
-{
-    m_daoSequence = seq;
-}
-
-uint8_t
-RplDaoHeader::GetDaoSequence() const
+DaoBaseObjectHeader::GetDaoSequence() const
 {
     return m_daoSequence;
 }
 
 void
-RplDaoHeader::SetDodagId(Ipv6Address dodagId)
+DaoBaseObjectHeader::SetDodagId(Ipv6Address dodagId)
 {
     m_dodagId = dodagId;
-    SetDodagIdPresent(true);
+    m_d = true;
 }
 
 Ipv6Address
-RplDaoHeader::GetDodagId() const
+DaoBaseObjectHeader::GetDodagId() const
 {
     return m_dodagId;
 }
 
 std::ostream&
-operator<<(std::ostream& os, const RplDaoHeader& h)
+operator<<(std::ostream& os, const DaoBaseObjectHeader& h)
 {
     h.Print(os);
     return os;
 }
 
 /*
- * RplDaoAckHeader
+ * DaoAckBaseObjectHeader — \RFC{6550} Section 6.5 / 6.5.1 (Figure 17)
  */
 
-NS_OBJECT_ENSURE_REGISTERED(RplDaoAckHeader);
+NS_OBJECT_ENSURE_REGISTERED(DaoAckBaseObjectHeader);
 
-RplDaoAckHeader::RplDaoAckHeader()
-    : m_instanceId(0),
-      m_flags(0),
+DaoAckBaseObjectHeader::DaoAckBaseObjectHeader()
+    : m_rplInstanceId(0),
+      m_d(false),
       m_daoSequence(0),
-      m_status(0),
+      m_status(static_cast<uint8_t>(DaoAckStatus::UNQUALIFIED_ACCEPTANCE)),
       m_dodagId(Ipv6Address::GetZero())
 {
 }
 
 TypeId
-RplDaoAckHeader::GetTypeId()
+DaoAckBaseObjectHeader::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::RplDaoAckHeader")
+    static TypeId tid = TypeId("ns3::DaoAckBaseObjectHeader")
                             .SetParent<Header>()
                             .SetGroupName("Rpl")
-                            .AddConstructor<RplDaoAckHeader>();
+                            .AddConstructor<DaoAckBaseObjectHeader>();
     return tid;
 }
 
 TypeId
-RplDaoAckHeader::GetInstanceTypeId() const
+DaoAckBaseObjectHeader::GetInstanceTypeId() const
 {
     return GetTypeId();
 }
 
 uint32_t
-RplDaoAckHeader::GetSerializedSize() const
+DaoAckBaseObjectHeader::GetSerializedSize() const
 {
-    return GetDodagIdPresent() ? 20 : 4;
+    return m_d ? 20 : 4;
 }
 
 void
-RplDaoAckHeader::Serialize(Buffer::Iterator start) const
+DaoAckBaseObjectHeader::Serialize(Buffer::Iterator start) const
 {
     Buffer::Iterator i = start;
-    i.WriteU8(m_instanceId);
-    i.WriteU8(m_flags);
+    i.WriteU8(m_rplInstanceId);
+    i.WriteU8(m_d ? 0x80 : 0x00);
     i.WriteU8(m_daoSequence);
     i.WriteU8(m_status);
 
-    if (GetDodagIdPresent())
+    if (m_d)
     {
         uint8_t buf[16];
         m_dodagId.Serialize(buf);
@@ -523,15 +497,15 @@ RplDaoAckHeader::Serialize(Buffer::Iterator start) const
 }
 
 uint32_t
-RplDaoAckHeader::Deserialize(Buffer::Iterator start)
+DaoAckBaseObjectHeader::Deserialize(Buffer::Iterator start)
 {
     Buffer::Iterator i = start;
-    m_instanceId = i.ReadU8();
-    m_flags = i.ReadU8();
+    m_rplInstanceId = i.ReadU8();
+    m_d = (i.ReadU8() & 0x80) != 0;
     m_daoSequence = i.ReadU8();
     m_status = i.ReadU8();
 
-    if (GetDodagIdPresent())
+    if (m_d)
     {
         uint8_t buf[16];
         i.Read(buf, 16);
@@ -542,86 +516,86 @@ RplDaoAckHeader::Deserialize(Buffer::Iterator start)
 }
 
 void
-RplDaoAckHeader::Print(std::ostream& os) const
+DaoAckBaseObjectHeader::Print(std::ostream& os) const
 {
-    os << "DAO-ACK instance=" << int(m_instanceId) << " D=" << GetDodagIdPresent()
-       << " seq=" << int(m_daoSequence) << " status=" << int(m_status);
-    if (GetDodagIdPresent())
+    os << "DAO-ACK Base Object"
+       << " RPLInstanceID=" << int(m_rplInstanceId) << " D=" << m_d
+       << " DAOSequence=" << int(m_daoSequence) << " Status=" << int(m_status);
+    if (m_d)
     {
         os << " DODAGID=" << m_dodagId;
     }
 }
 
 void
-RplDaoAckHeader::SetInstanceId(uint8_t instanceId)
+DaoAckBaseObjectHeader::SetRplInstanceId(uint8_t rplInstanceId)
 {
-    m_instanceId = instanceId;
+    m_rplInstanceId = rplInstanceId;
 }
 
 uint8_t
-RplDaoAckHeader::GetInstanceId() const
+DaoAckBaseObjectHeader::GetRplInstanceId() const
 {
-    return m_instanceId;
+    return m_rplInstanceId;
 }
 
 void
-RplDaoAckHeader::SetDodagIdPresent(bool d)
+DaoAckBaseObjectHeader::SetD(bool d)
 {
-    if (d)
-    {
-        m_flags |= 0x80;
-    }
-    else
-    {
-        m_flags &= ~0x80;
-    }
+    m_d = d;
 }
 
 bool
-RplDaoAckHeader::GetDodagIdPresent() const
+DaoAckBaseObjectHeader::GetD() const
 {
-    return (m_flags & 0x80) != 0;
+    return m_d;
 }
 
 void
-RplDaoAckHeader::SetDaoSequence(uint8_t seq)
+DaoAckBaseObjectHeader::SetDaoSequence(uint8_t daoSequence)
 {
-    m_daoSequence = seq;
+    m_daoSequence = daoSequence;
 }
 
 uint8_t
-RplDaoAckHeader::GetDaoSequence() const
+DaoAckBaseObjectHeader::GetDaoSequence() const
 {
     return m_daoSequence;
 }
 
 void
-RplDaoAckHeader::SetStatus(uint8_t status)
+DaoAckBaseObjectHeader::SetStatus(DaoAckStatus status)
+{
+    m_status = static_cast<uint8_t>(status);
+}
+
+void
+DaoAckBaseObjectHeader::SetStatus(uint8_t status)
 {
     m_status = status;
 }
 
 uint8_t
-RplDaoAckHeader::GetStatus() const
+DaoAckBaseObjectHeader::GetStatus() const
 {
     return m_status;
 }
 
 void
-RplDaoAckHeader::SetDodagId(Ipv6Address dodagId)
+DaoAckBaseObjectHeader::SetDodagId(Ipv6Address dodagId)
 {
     m_dodagId = dodagId;
-    SetDodagIdPresent(true);
+    m_d = true;
 }
 
 Ipv6Address
-RplDaoAckHeader::GetDodagId() const
+DaoAckBaseObjectHeader::GetDodagId() const
 {
     return m_dodagId;
 }
 
 std::ostream&
-operator<<(std::ostream& os, const RplDaoAckHeader& h)
+operator<<(std::ostream& os, const DaoAckBaseObjectHeader& h)
 {
     h.Print(os);
     return os;
