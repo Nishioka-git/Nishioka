@@ -1,5 +1,4 @@
 #include "ns3/core-module.h"
-#include "ns3/internet-apps-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/lr-wpan-module.h"
 #include "ns3/mobility-module.h"
@@ -15,42 +14,29 @@ using namespace ns3::lrwpan;
 namespace
 {
 
-uint32_t g_routeOutputOk = 0;
-uint32_t g_routeOutputFail = 0;
+uint32_t g_dioTx = 0;
+uint32_t g_dioRx = 0;
 
-std::string
-SockErrToString(Socket::SocketErrno err)
+void
+DioTxProbe(Ptr<const Packet> /*packet*/,
+           Ipv6Address src,
+           Ipv6Address dst,
+           DioBaseObjectHeader dio)
 {
-    switch (err)
-    {
-    case Socket::ERROR_NOTERROR:
-        return "ERROR_NOTERROR";
-    case Socket::ERROR_NOROUTETOHOST:
-        return "ERROR_NOROUTETOHOST";
-    default:
-        return "errno=" + std::to_string(static_cast<int>(err));
-    }
+    ++g_dioTx;
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Tx] src=" << src << " dst=" << dst
+              << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId() << "\n";
 }
 
 void
-RouteOutputProbe(std::string context,
-                 Ptr<const Packet> /*packet*/,
-                 Ipv6Address dst,
-                 bool success,
-                 Socket::SocketErrno sockerr)
+DioRxProbe(Ptr<const Packet> /*packet*/,
+           Ipv6Address src,
+           Ipv6Address dst,
+           DioBaseObjectHeader dio)
 {
-    if (success)
-    {
-        ++g_routeOutputOk;
-        std::cout << Simulator::Now().As(Time::S) << " [RPL RouteOutput OK] " << context
-                  << " dst=" << dst << "\n";
-    }
-    else
-    {
-        ++g_routeOutputFail;
-        std::cout << Simulator::Now().As(Time::S) << " [RPL RouteOutput FAIL] " << context
-                  << " dst=" << dst << " " << SockErrToString(sockerr) << "\n";
-    }
+    ++g_dioRx;
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Rx] src=" << src << " dst=" << dst
+              << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId() << "\n";
 }
 
 Ptr<Rpl>
@@ -79,30 +65,6 @@ GetRpl(Ptr<Node> node)
     return nullptr;
 }
 
-void
-PrintRplTables(NodeContainer nodes)
-{
-    Ptr<OutputStreamWrapper> stream = Create<OutputStreamWrapper>(&std::cout);
-    for (uint32_t i = 0; i < nodes.GetN(); ++i)
-    {
-        Ptr<Rpl> rpl = GetRpl(nodes.Get(i));
-        if (rpl)
-        {
-            rpl->PrintRoutingTable(stream);
-        }
-    }
-}
-
-void
-DataSentMacConfirm(Ptr<LrWpanNetDevice> device, McpsDataConfirmParams params)
-{
-    if (params.m_status == MacStatus::SUCCESS)
-    {
-        std::cout << Simulator::Now().As(Time::S) << " | Node " << device->GetNode()->GetId()
-                  << " | Transmission successfully sent\n";
-    }
-}
-
 } // namespace
 
 int
@@ -114,13 +76,10 @@ main(int argc, char** argv)
     cmd.AddValue("verbose", "turn on log components", verbose);
     cmd.Parse(argc, argv);
 
-    LogComponentEnable("Rpl", LOG_LEVEL_WARN);
     if (verbose)
     {
         LogComponentEnableAll(LogLevel(LOG_PREFIX_TIME | LOG_PREFIX_FUNC | LOG_PREFIX_NODE));
-        LogComponentEnable("LrWpanMac", LOG_LEVEL_INFO);
-        LogComponentEnable("Ping", LOG_LEVEL_INFO);
-        LogComponentEnable("Rpl", LOG_LEVEL_LOGIC);
+        LogComponentEnable("Rpl", LOG_LEVEL_INFO);
     }
 
     NodeContainer nodes;
@@ -148,28 +107,25 @@ main(int argc, char** argv)
     lrWpanHelper.AddPropagationLossModel("ns3::LogDistancePropagationLossModel");
     NetDeviceContainer lrwpanDevices = lrWpanHelper.Install(nodes);
 
-    Ptr<LrWpanNetDevice> dev1 = lrwpanDevices.Get(0)->GetObject<LrWpanNetDevice>();
-    Ptr<LrWpanNetDevice> dev2 = lrwpanDevices.Get(1)->GetObject<LrWpanNetDevice>();
-    dev1->GetMac()->SetMcpsDataConfirmCallback(MakeBoundCallback(&DataSentMacConfirm, dev1));
-    dev2->GetMac()->SetMcpsDataConfirmCallback(MakeBoundCallback(&DataSentMacConfirm, dev2));
-
     lrWpanHelper.CreateAssociatedPan(lrwpanDevices, 5);
 
+    Ptr<LrWpanNetDevice> dev0 = lrwpanDevices.Get(0)->GetObject<LrWpanNetDevice>();
     MlmeStartRequestParams params;
     params.m_panCoor = true;
     params.m_PanId = 5;
     params.m_bcnOrd = 14;
     params.m_sfrmOrd = 13;
     params.m_logCh = 11;
-    Simulator::ScheduleWithContext(dev1->GetNode()->GetId(),
+    Simulator::ScheduleWithContext(dev0->GetNode()->GetId(),
                                    Seconds(0),
                                    &LrWpanMac::MlmeStartRequest,
-                                   dev1->GetMac(),
+                                   dev0->GetMac(),
                                    params);
 
-    RplHelper rpl;
+    RplHelper rplHelper;
+    rplHelper.Set("DioInterval", TimeValue(Seconds(1.0)));
     InternetStackHelper internetv6;
-    internetv6.SetRoutingHelper(rpl);
+    internetv6.SetRoutingHelper(rplHelper);
     internetv6.Install(nodes);
 
     Ptr<Rpl> rpl0 = GetRpl(nodes.Get(0));
@@ -177,8 +133,10 @@ main(int argc, char** argv)
     NS_ABORT_MSG_UNLESS(rpl0 && rpl1, "RPL routing protocol was not installed");
     rpl0->SetRoot(true);
 
-    rpl0->TraceConnect("RouteOutputProbe", "Node0", MakeCallback(&RouteOutputProbe));
-    rpl1->TraceConnect("RouteOutputProbe", "Node1", MakeCallback(&RouteOutputProbe));
+    rpl0->TraceConnectWithoutContext("DioTx", MakeCallback(&DioTxProbe));
+    rpl0->TraceConnectWithoutContext("DioRx", MakeCallback(&DioRxProbe));
+    rpl1->TraceConnectWithoutContext("DioTx", MakeCallback(&DioTxProbe));
+    rpl1->TraceConnectWithoutContext("DioRx", MakeCallback(&DioRxProbe));
 
     SixLowPanHelper sixlowpan;
     NetDeviceContainer devices = sixlowpan.Install(lrwpanDevices);
@@ -187,40 +145,29 @@ main(int argc, char** argv)
     ipv6.SetBase(Ipv6Address("2001:2::"), Ipv6Prefix(64));
     Ipv6InterfaceContainer deviceInterfaces = ipv6.Assign(devices);
 
-    Ipv6Address peerAddress = deviceInterfaces.GetAddress(1, 1);
-    // Deliberately unreachable destination (not covered by 2001:2::/64)
-    Ipv6Address pingTarget("2001:db8:bad::1");
-
-    std::cout << "Ping unreachable " << pingTarget << " (peer is " << peerAddress << ")\n"
-              << "Expected: [RPL RouteOutput FAIL] ERROR_NOROUTETOHOST\n\n";
-    PrintRplTables(nodes);
-
-    PingHelper ping(pingTarget);
-    ping.SetAttribute("Count", UintegerValue(1));
-    ping.SetAttribute("Interval", TimeValue(Seconds(1.)));
-    ping.SetAttribute("Size", UintegerValue(16));
-    ApplicationContainer apps = ping.Install(nodes.Get(0));
-    apps.Start(Seconds(2));
-    apps.Stop(Seconds(7));
+    std::cout << "Root=Node0 " << deviceInterfaces.GetAddress(0, 1)
+              << "  Child=Node1 " << deviceInterfaces.GetAddress(1, 1) << "\n"
+              << "Expect: Node0 periodically sends DIO to ff02::1a; Node1 receives them.\n\n";
 
     AsciiTraceHelper ascii;
     lrWpanHelper.EnableAsciiAll(ascii.CreateFileStream("Ping-6LoW-lr-wpan-beacon-rpl.tr"));
     lrWpanHelper.EnablePcapAll(std::string("Ping-6LoW-lr-wpan-beacon-rpl"), true);
 
-    Simulator::Stop(Seconds(7));
+    Simulator::Stop(Seconds(5));
     Simulator::Run();
 
-    std::cout << "\n=== RPL probe summary ===\n"
-              << "RouteOutput OK=" << g_routeOutputOk << " FAIL=" << g_routeOutputFail << "\n";
-    if (g_routeOutputFail > 0)
+    std::cout << "\n=== RPL DIO summary ===\n"
+              << "DIO Tx=" << g_dioTx << " Rx=" << g_dioRx << "\n";
+    if (g_dioTx > 0 && g_dioRx > 0)
     {
-        std::cout << "PASS: RPL RouteOutput reported NOROUTETOHOST (RPL is consulted).\n";
+        std::cout << "PASS: root transmitted DIO and another node received it.\n";
     }
     else
     {
-        std::cout << "UNEXPECTED: no RouteOutput FAIL. Is RPL actually used?\n";
+        std::cout << "UNEXPECTED: DIO Tx/Rx not observed (Tx=" << g_dioTx << " Rx=" << g_dioRx
+                  << ").\n";
     }
 
     Simulator::Destroy();
-    return 0;
+    return (g_dioTx > 0 && g_dioRx > 0) ? 0 : 1;
 }

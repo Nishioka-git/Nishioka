@@ -9,11 +9,15 @@
 #ifndef RPL_H
 #define RPL_H
 
+#include "rpl-header.h"
+
 #include "ns3/ipv6-routing-protocol.h"
 #include "ns3/ipv6.h"
+#include "ns3/nstime.h"
 #include "ns3/traced-callback.h"
 
 #include <list>
+#include <map>
 #include <set>
 
 namespace ns3
@@ -26,6 +30,14 @@ namespace ns3
  * RPL (IPv6 Routing Protocol for Low-Power and Lossy Networks) defined in
  * \RFC{6550}.  Control messages are carried in ICMPv6 (type 155).
  */
+
+/**
+ * @ingroup rpl
+ * @brief All-RPL-nodes link-local multicast (\RFC{6550} Section 6)
+ *
+ * "A RPL node MUST join the All-RPL-Nodes multicast address."
+ */
+static const Ipv6Address RPL_ALL_NODES_MULTICAST("ff02::1a");
 
 /**
  * @ingroup rpl
@@ -42,6 +54,9 @@ struct RplRouteEntry
 /**
  * @ingroup rpl
  * @brief RPL ルーティングプロトコル（\RFC{6550}）
+ *
+ * Phase 1: ICMPv6 Type 155 ソケットによる DIO（Base Object）の送受信と、
+ * DODAG ルートによる周期 DIO 送信。DIS / DAO は未実装。
  */
 class Rpl : public Ipv6RoutingProtocol
 {
@@ -84,7 +99,18 @@ class Rpl : public Ipv6RoutingProtocol
 
     void AddDefaultRouteTo(Ipv6Address nextHop, uint32_t interface);
 
+    /**
+     * @brief Mark this node as DODAG root (or clear the flag).
+     *
+     * When set to true after initialization, starts periodic DIO
+     * transmission.  When cleared, stops the DIO timer.
+     */
     void SetRoot(bool isRoot);
+
+    /**
+     * @return true if this node is configured as DODAG root
+     */
+    bool IsRoot() const;
 
     /**
      * TracedCallback signature for RouteOutput / RouteInput probes.
@@ -98,11 +124,87 @@ class Rpl : public Ipv6RoutingProtocol
                                              bool success,
                                              Socket::SocketErrno sockerr);
 
+    /**
+     * TracedCallback signature for DIO transmit / receive.
+     * @param packet packet containing ICMPv6 + DIO Base Object
+     * @param src source IPv6 address (sender link-local on Rx; local on Tx)
+     * @param dst destination IPv6 address (typically all-RPL-nodes)
+     * @param dio deserialized DIO Base Object
+     */
+    typedef void (*DioTracedCallback)(Ptr<const Packet> packet,
+                                      Ipv6Address src,
+                                      Ipv6Address dst,
+                                      DioBaseObjectHeader dio);
+
   protected:
     void DoDispose() override;
     void DoInitialize() override;
 
   private:
+    /**
+     * @brief Create ICMPv6 raw sockets for an active RPL interface.
+     * @param interface IPv6 interface index
+     */
+    void BindToInterface(uint32_t interface);
+
+    /**
+     * @brief Remove sockets bound to an interface.
+     * @param interface IPv6 interface index
+     */
+    void UnbindFromInterface(uint32_t interface);
+
+    /**
+     * @brief Receive RPL control messages from an ICMPv6 raw socket.
+     * @param socket socket that received data
+     */
+    void Receive(Ptr<Socket> socket);
+
+    /**
+     * @brief Handle a received DIO Base Object.
+     * @param packet remaining payload after ICMPv6 header removal
+     * @param src sender address
+     * @param dst destination address
+     * @param interface incoming IPv6 interface index
+     */
+    void HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t interface);
+
+    /**
+     * @brief Build and multicast a DIO on all active interfaces (root only).
+     */
+    void SendDio();
+
+    /**
+     * @brief Send one DIO on a specific interface.
+     * @param interface IPv6 interface index
+     * @param socket socket bound to that interface's link-local address
+     */
+    void SendDioOnInterface(uint32_t interface, Ptr<Socket> socket);
+
+    /**
+     * @brief Schedule the next periodic DIO (root only).
+     */
+    void ScheduleNextDio();
+
+    /**
+     * @brief Fill a DIO Base Object from local DODAG state.
+     * @return populated DIO header
+     */
+    DioBaseObjectHeader BuildDioHeader() const;
+
+    /**
+     * @brief Prefer a global address for DODAGID; fall back to link-local.
+     * @param interface IPv6 interface index
+     * @return address suitable as DODAGID, or :: if none
+     */
+    Ipv6Address SelectDodagId(uint32_t interface) const;
+
+    /**
+     * @brief Link-local address on an interface, if any.
+     * @param interface IPv6 interface index
+     * @return link-local address, or :: if none
+     */
+    Ipv6Address GetLinkLocalAddress(uint32_t interface) const;
+
     Ptr<Ipv6Route> Lookup(Ipv6Address dest, bool setSource, Ptr<NetDevice> oif);
 
     void AddNetworkRouteTo(Ipv6Address network,
@@ -121,8 +223,25 @@ class Rpl : public Ipv6RoutingProtocol
     std::set<uint32_t> m_interfaceExclusions;
     bool m_initialized;
 
+    /// Per-interface ICMPv6 raw sockets (link-local bind + BindToNetDevice)
+    std::map<Ptr<Socket>, uint32_t> m_sockets;
+    /// Multicast receive socket joined to all-RPL-nodes (ff02::1a)
+    Ptr<Socket> m_multicastRecvSocket;
+
+    Time m_dioInterval;       //!< Periodic DIO interval (root)
+    EventId m_dioTimerEvent;  //!< Next scheduled DIO send
+    uint8_t m_rplInstanceId;  //!< RPLInstanceID advertised in DIO
+    uint8_t m_versionNumber;  //!< DODAG Version Number
+    uint8_t m_dtsn;           //!< Destination Advertisement Trigger Sequence Number
+    uint16_t m_rank;          //!< Current Rank (root uses MinHopRankIncrease-like value)
+    ModeOfOperation m_mop;    //!< Mode of Operation
+    uint8_t m_dodagPreference; //!< DODAGPreference (Prf)
+    Ipv6Address m_dodagId;    //!< DODAGID (set from root global address)
+
     TracedCallback<Ptr<const Packet>, Ipv6Address, bool, Socket::SocketErrno> m_routeOutputTrace;
     TracedCallback<Ptr<const Packet>, Ipv6Address, bool, Socket::SocketErrno> m_routeInputTrace;
+    TracedCallback<Ptr<const Packet>, Ipv6Address, Ipv6Address, DioBaseObjectHeader> m_dioTxTrace;
+    TracedCallback<Ptr<const Packet>, Ipv6Address, Ipv6Address, DioBaseObjectHeader> m_dioRxTrace;
 };
 
 } // namespace ns3
