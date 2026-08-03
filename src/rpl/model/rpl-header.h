@@ -1,15 +1,3 @@
-/*
- * Copyright (c) 2014 Universita' di Firenze, Italy
- *
- * SPDX-License-Identifier: GPL-2.0-only
- *
- * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
- *
- * RPL control message base formats and option type codes from \RFC{6550}
- * Section 6.  Type / field names follow the RFC wording (e.g. "DIO Base
- * Object", "DODAGPreference", "DAOSequence").
- */
-
 #ifndef RPL_HEADER_H
 #define RPL_HEADER_H
 

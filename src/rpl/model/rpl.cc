@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2014 Universita' di Firenze, Italy
- *
- * SPDX-License-Identifier: GPL-2.0-only
- *
- * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
- */
-
 #include "rpl.h"
 
 #include "ns3/boolean.h"
@@ -20,8 +12,9 @@
 #include "ns3/output-stream-wrapper.h"
 #include "ns3/simulator.h"
 #include "ns3/socket.h"
-#include "ns3/trace-source-accessor.h"
 #include "ns3/uinteger.h"
+
+#include <iostream>
 
 namespace ns3
 {
@@ -80,28 +73,12 @@ Rpl::GetTypeId()
                           "DODAG Version Number advertised in DIO messages.",
                           UintegerValue(1),
                           MakeUintegerAccessor(&Rpl::m_versionNumber),
-                          MakeUintegerChecker<uint8_t>())
-            .AddTraceSource("RouteOutputProbe",
-                            "Fired when RouteOutput is invoked (success or NOROUTETOHOST).",
-                            MakeTraceSourceAccessor(&Rpl::m_routeOutputTrace),
-                            "ns3::Rpl::RouteProbeTracedCallback")
-            .AddTraceSource("RouteInputProbe",
-                            "Fired when RouteInput is invoked for unicast forwarding.",
-                            MakeTraceSourceAccessor(&Rpl::m_routeInputTrace),
-                            "ns3::Rpl::RouteProbeTracedCallback")
-            .AddTraceSource("DioTx",
-                            "Fired when a DIO is transmitted.",
-                            MakeTraceSourceAccessor(&Rpl::m_dioTxTrace),
-                            "ns3::Rpl::DioTracedCallback")
-            .AddTraceSource("DioRx",
-                            "Fired when a DIO is received.",
-                            MakeTraceSourceAccessor(&Rpl::m_dioRxTrace),
-                            "ns3::Rpl::DioTracedCallback");
+                          MakeUintegerChecker<uint8_t>());
     return tid;
 }
 
 void
-Rpl::DoDispose()
+Rpl::DoDispose()  //Dispose obhect
 {
     NS_LOG_FUNCTION(this);
 
@@ -131,7 +108,7 @@ Rpl::DoInitialize()
 {
     NS_LOG_FUNCTION(this);
 
-    m_initialized = true;
+    m_initialized = true;  //Add RPL to available IFs(111-132)
 
     NS_ASSERT_MSG(m_ipv6, "SetIpv6 must be called before DoInitialize");
 
@@ -182,7 +159,7 @@ Rpl::SetIpv6(Ptr<Ipv6> ipv6)
     m_ipv6 = ipv6;
 }
 
-Ptr<Ipv6Route>
+Ptr<Ipv6Route>  //Determines the route for packets sent by this node
 Rpl::RouteOutput(Ptr<Packet> p,
                  const Ipv6Header& header,
                  Ptr<NetDevice> oif,
@@ -190,22 +167,20 @@ Rpl::RouteOutput(Ptr<Packet> p,
 {
     NS_LOG_FUNCTION(this << header.GetDestination() << oif);
 
-    Ptr<Ipv6Route> rtentry = Lookup(header.GetDestination(), true, oif);
+    Ptr<Ipv6Route> rtentry = Lookup(header.GetDestination(), true, oif);  //search routingtable
     if (rtentry)
     {
         sockerr = Socket::ERROR_NOTERROR;
-        m_routeOutputTrace(p, header.GetDestination(), true, sockerr);
     }
     else
     {
         sockerr = Socket::ERROR_NOROUTETOHOST;
-        m_routeOutputTrace(p, header.GetDestination(), false, sockerr);
         NS_LOG_WARN("RouteOutput FAIL dst=" << header.GetDestination() << " NOROUTETOHOST");
     }
     return rtentry;
 }
 
-bool
+bool  //Determine whether to forward packets received from other sources
 Rpl::RouteInput(Ptr<const Packet> p,
                 const Ipv6Header& header,
                 Ptr<const NetDevice> idev,
@@ -227,17 +202,15 @@ Rpl::RouteInput(Ptr<const Packet> p,
 
     if (header.GetDestination().IsLinkLocal() || header.GetSource().IsLinkLocal())
     {
-        m_routeInputTrace(p, header.GetDestination(), false, Socket::ERROR_NOROUTETOHOST);
         if (!ecb.IsNull())
         {
-            ecb(p, header, Socket::ERROR_NOROUTETOHOST);
+            ecb(p, header, Socket::ERROR_NOROUTETOHOST);  //ecb is the error callback
         }
         return false;
     }
 
     if (!m_ipv6->IsForwarding(iif))
     {
-        m_routeInputTrace(p, header.GetDestination(), false, Socket::ERROR_NOROUTETOHOST);
         if (!ecb.IsNull())
         {
             ecb(p, header, Socket::ERROR_NOROUTETOHOST);
@@ -248,12 +221,10 @@ Rpl::RouteInput(Ptr<const Packet> p,
     Ptr<Ipv6Route> rtentry = Lookup(header.GetDestination(), false, nullptr);
     if (rtentry)
     {
-        m_routeInputTrace(p, header.GetDestination(), true, Socket::ERROR_NOTERROR);
-        ucb(idev, rtentry, p, header);
+        ucb(idev, rtentry, p, header);  //ucb is the unicast forward callback
         return true;
     }
 
-    m_routeInputTrace(p, header.GetDestination(), false, Socket::ERROR_NOROUTETOHOST);
     NS_LOG_WARN("RouteInput FAIL dst=" << header.GetDestination() << " NOROUTETOHOST");
     return false;
 }
@@ -278,10 +249,10 @@ Rpl::NotifyInterfaceUp(uint32_t interface)
         return;
     }
 
-    m_ipv6->SetForwarding(interface, true);
+    m_ipv6->SetForwarding(interface, true);  //create socket
     BindToInterface(interface);
 
-    if (m_isRoot && m_dodagId.IsAny())
+    if (m_isRoot && m_dodagId.IsAny())  //determine the IF
     {
         m_dodagId = SelectDodagId(interface);
     }
@@ -320,7 +291,7 @@ Rpl::NotifyAddAddress(uint32_t interface, Ipv6InterfaceAddress address)
         }
     }
 
-    if (m_initialized && address.GetScope() == Ipv6InterfaceAddress::LINKLOCAL)
+    if (m_initialized && address.GetScope() == Ipv6InterfaceAddress::LINKLOCAL)  //when initialized
     {
         BindToInterface(interface);
     }
@@ -378,7 +349,8 @@ Rpl::NotifyRemoveRoute(Ipv6Address dst,
 }
 
 void
-Rpl::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit /*unit*/) const
+Rpl::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit /*unit*/) const  
+//Printable Routing Table (Required override for IPv6RoutingProtocol)
 {
     NS_LOG_FUNCTION(this);
 
@@ -392,13 +364,15 @@ Rpl::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit /*unit*/) con
             << route.nextHop << " if " << route.interface << "\n";
     }
 }
-
+/*
+//対象IF番号ではRPLしない集合の保存（未使用のためコメントアウト）
 void
 Rpl::SetInterfaceExclusions(std::set<uint32_t> exceptions)
 {
     NS_LOG_FUNCTION(this);
     m_interfaceExclusions = exceptions;
 }
+*/
 
 void
 Rpl::AddDefaultRouteTo(Ipv6Address nextHop, uint32_t interface)
@@ -445,13 +419,13 @@ Rpl::SetRoot(bool isRoot)
 }
 
 bool
-Rpl::IsRoot() const
+Rpl::IsRoot() const  //Check if this node is the root node
 {
     return m_isRoot;
 }
 
 void
-Rpl::BindToInterface(uint32_t interface)
+Rpl::BindToInterface(uint32_t interface)   //Create socket for ICMPv6
 {
     NS_LOG_FUNCTION(this << interface);
 
@@ -516,7 +490,7 @@ Rpl::UnbindFromInterface(uint32_t interface)
 }
 
 void
-Rpl::Receive(Ptr<Socket> socket)
+Rpl::Receive(Ptr<Socket> socket)  //Receive socket  callback
 {
     NS_LOG_FUNCTION(this << socket);
 
@@ -569,6 +543,7 @@ Rpl::Receive(Ptr<Socket> socket)
 
 void
 Rpl::HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t /*interface*/)
+//Read DIO BASE
 {
     NS_LOG_FUNCTION(this << src << dst);
 
@@ -593,8 +568,9 @@ Rpl::HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t /*
     }
     packet->RemoveHeader(dio);
 
-    NS_LOG_INFO("DIO Rx from " << src << " dst=" << dst << " " << dio);
-    m_dioRxTrace(packet, src, dst, dio);
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Rx] node=" << GetObject<Node>()->GetId()
+              << " src=" << src << " dst=" << dst << " Rank=" << dio.GetRank()
+              << " DODAGID=" << dio.GetDodagId() << "\n";
 }
 
 DioBaseObjectHeader
@@ -681,9 +657,9 @@ Rpl::SendDioOnInterface(uint32_t interface, Ptr<Socket> socket)
     hopLimitTag.SetHopLimit(255);
     packet->AddPacketTag(hopLimitTag);
 
-    NS_LOG_INFO("DIO Tx if=" << interface << " src=" << src << " dst=" << RPL_ALL_NODES_MULTICAST
-                             << " " << dio);
-    m_dioTxTrace(packet, src, RPL_ALL_NODES_MULTICAST, dio);
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Tx] node=" << GetObject<Node>()->GetId()
+              << " if=" << interface << " src=" << src << " dst=" << RPL_ALL_NODES_MULTICAST
+              << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId() << "\n";
 
     int sent = socket->SendTo(packet, 0, Inet6SocketAddress(RPL_ALL_NODES_MULTICAST, 0));
     if (sent <= 0)
@@ -738,6 +714,9 @@ Rpl::GetLinkLocalAddress(uint32_t interface) const
 
 Ptr<Ipv6Route>
 Rpl::Lookup(Ipv6Address dest, bool setSource, Ptr<NetDevice> oif)
+/*A function that selects one route matching the destination 
+*/`dest` from `m_routes` (the RPL simplified routing table) and returns it as an `IPv6Route`.
+
 {
     NS_LOG_FUNCTION(this << dest << setSource << oif);
 

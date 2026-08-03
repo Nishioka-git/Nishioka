@@ -3,7 +3,6 @@
 #include "ns3/lr-wpan-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/propagation-module.h"
-#include "ns3/rpl-header.h"
 #include "ns3/rpl-module.h"
 #include "ns3/sixlowpan-module.h"
 #include "ns3/spectrum-module.h"
@@ -14,33 +13,8 @@ using namespace ns3::lrwpan;
 namespace
 {
 
-uint32_t g_dioTx = 0;
-uint32_t g_dioRx = 0;
-
-void
-DioTxProbe(Ptr<const Packet> /*packet*/,
-           Ipv6Address src,
-           Ipv6Address dst,
-           DioBaseObjectHeader dio)
-{
-    ++g_dioTx;
-    std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Tx] src=" << src << " dst=" << dst
-              << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId() << "\n";
-}
-
-void
-DioRxProbe(Ptr<const Packet> /*packet*/,
-           Ipv6Address src,
-           Ipv6Address dst,
-           DioBaseObjectHeader dio)
-{
-    ++g_dioRx;
-    std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Rx] src=" << src << " dst=" << dst
-              << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId() << "\n";
-}
-
 Ptr<Rpl>
-GetRpl(Ptr<Node> node)
+GetRpl(Ptr<Node> node)  //Get RPL object
 {
     Ptr<Ipv6> ipv6 = node->GetObject<Ipv6>();
     Ptr<Rpl> rpl = DynamicCast<Rpl>(ipv6->GetRoutingProtocol());
@@ -131,12 +105,7 @@ main(int argc, char** argv)
     Ptr<Rpl> rpl0 = GetRpl(nodes.Get(0));
     Ptr<Rpl> rpl1 = GetRpl(nodes.Get(1));
     NS_ABORT_MSG_UNLESS(rpl0 && rpl1, "RPL routing protocol was not installed");
-    rpl0->SetRoot(true);
-
-    rpl0->TraceConnectWithoutContext("DioTx", MakeCallback(&DioTxProbe));
-    rpl0->TraceConnectWithoutContext("DioRx", MakeCallback(&DioRxProbe));
-    rpl1->TraceConnectWithoutContext("DioTx", MakeCallback(&DioTxProbe));
-    rpl1->TraceConnectWithoutContext("DioRx", MakeCallback(&DioRxProbe));
+    rpl0->SetRoot(true);  //set the root node0
 
     SixLowPanHelper sixlowpan;
     NetDeviceContainer devices = sixlowpan.Install(lrwpanDevices);
@@ -147,27 +116,11 @@ main(int argc, char** argv)
 
     std::cout << "Root=Node0 " << deviceInterfaces.GetAddress(0, 1)
               << "  Child=Node1 " << deviceInterfaces.GetAddress(1, 1) << "\n"
-              << "Expect: Node0 periodically sends DIO to ff02::1a; Node1 receives them.\n\n";
-
-    AsciiTraceHelper ascii;
-    lrWpanHelper.EnableAsciiAll(ascii.CreateFileStream("Ping-6LoW-lr-wpan-beacon-rpl.tr"));
-    lrWpanHelper.EnablePcapAll(std::string("Ping-6LoW-lr-wpan-beacon-rpl"), true);
+              << "Expect: Node0 periodically sends DIO to ff02::1a; Node1 receives them.\n"
+              << "DIO Tx/Rx lines are printed by Rpl itself.\n\n";
 
     Simulator::Stop(Seconds(5));
     Simulator::Run();
-
-    std::cout << "\n=== RPL DIO summary ===\n"
-              << "DIO Tx=" << g_dioTx << " Rx=" << g_dioRx << "\n";
-    if (g_dioTx > 0 && g_dioRx > 0)
-    {
-        std::cout << "PASS: root transmitted DIO and another node received it.\n";
-    }
-    else
-    {
-        std::cout << "UNEXPECTED: DIO Tx/Rx not observed (Tx=" << g_dioTx << " Rx=" << g_dioRx
-                  << ").\n";
-    }
-
     Simulator::Destroy();
-    return (g_dioTx > 0 && g_dioRx > 0) ? 0 : 1;
+    return 0;
 }

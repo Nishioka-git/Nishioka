@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2014 Universita' di Firenze, Italy
- *
- * SPDX-License-Identifier: GPL-2.0-only
- *
- * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
- */
-
 #ifndef RPL_H
 #define RPL_H
 
@@ -14,7 +6,6 @@
 #include "ns3/ipv6-routing-protocol.h"
 #include "ns3/ipv6.h"
 #include "ns3/nstime.h"
-#include "ns3/traced-callback.h"
 
 #include <list>
 #include <map>
@@ -111,30 +102,6 @@ class Rpl : public Ipv6RoutingProtocol
      * @return true if this node is configured as DODAG root
      */
     bool IsRoot() const;
-
-    /**
-     * TracedCallback signature for RouteOutput / RouteInput probes.
-     * @param packet packet being routed (may be null for RouteOutput)
-     * @param dst destination address
-     * @param success true if a route was found / packet was forwarded
-     * @param errno socket errno (RouteOutput) or ERROR_NOROUTETOHOST on input failure
-     */
-    typedef void (*RouteProbeTracedCallback)(Ptr<const Packet> packet,
-                                             Ipv6Address dst,
-                                             bool success,
-                                             Socket::SocketErrno sockerr);
-
-    /**
-     * TracedCallback signature for DIO transmit / receive.
-     * @param packet packet containing ICMPv6 + DIO Base Object
-     * @param src source IPv6 address (sender link-local on Rx; local on Tx)
-     * @param dst destination IPv6 address (typically all-RPL-nodes)
-     * @param dio deserialized DIO Base Object
-     */
-    typedef void (*DioTracedCallback)(Ptr<const Packet> packet,
-                                      Ipv6Address src,
-                                      Ipv6Address dst,
-                                      DioBaseObjectHeader dio);
 
   protected:
     void DoDispose() override;
@@ -237,11 +204,6 @@ class Rpl : public Ipv6RoutingProtocol
     ModeOfOperation m_mop;    //!< Mode of Operation
     uint8_t m_dodagPreference; //!< DODAGPreference (Prf)
     Ipv6Address m_dodagId;    //!< DODAGID (set from root global address)
-
-    TracedCallback<Ptr<const Packet>, Ipv6Address, bool, Socket::SocketErrno> m_routeOutputTrace;
-    TracedCallback<Ptr<const Packet>, Ipv6Address, bool, Socket::SocketErrno> m_routeInputTrace;
-    TracedCallback<Ptr<const Packet>, Ipv6Address, Ipv6Address, DioBaseObjectHeader> m_dioTxTrace;
-    TracedCallback<Ptr<const Packet>, Ipv6Address, Ipv6Address, DioBaseObjectHeader> m_dioRxTrace;
 };
 
 } // namespace ns3

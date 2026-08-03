@@ -1,15 +1,3 @@
-/*
- * Copyright (c) 2014 Universita' di Firenze, Italy
- *
- * SPDX-License-Identifier: GPL-2.0-only
- *
- * Author: Tommaso Pecorella <tommaso.pecorella@unifi.it>
- *
- * Implementation of RPL Base Objects (\RFC{6550} Section 6).
- * Unused Flags/Reserved fields: "MUST be initialized to zero by the
- * sender and MUST be ignored by the receiver."
- */
-
 #include "rpl-header.h"
 
 #include "ns3/log.h"
