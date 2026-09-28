@@ -2,12 +2,12 @@
 #define RPL_H
 
 #include "rpl-header.h"
+#include "rpl-tables.h"
 
 #include "ns3/ipv6-routing-protocol.h"
 #include "ns3/ipv6.h"
 #include "ns3/nstime.h"
 
-#include <list>
 #include <map>
 #include <set>
 
@@ -27,18 +27,6 @@ namespace ns3
  * @brief All-RPL-nodes link-local multicast (\RFC{6550} Section 6)
  */
 static const Ipv6Address RPL_ALL_NODES_MULTICAST("ff02::1a");
-
-/**
- * @ingroup rpl
- * @brief RPL ルーティングテーブルエントリ（転送用の簡易表現）
- */
-struct RplRouteEntry
-{
-    Ipv6Address dest;    //!< 宛先プレフィックス
-    Ipv6Prefix prefix;   //!< プレフィックス長
-    Ipv6Address nextHop; //!< 次ホップ
-    uint32_t interface;  //!< 出力インタフェース
-};
 
 /**
  * @ingroup rpl
@@ -159,7 +147,8 @@ class Rpl : public Ipv6RoutingProtocol
     void InvalidateRoutesOnInterface(uint32_t interface);
 
     Ptr<Ipv6> m_ipv6;
-    std::list<RplRouteEntry> m_routes;
+    RplRoutingTable m_routingTable;   //!< Forwarding table (\RFC{6550} Sec. 9 / 10)
+    RplNeighborTable m_neighborTable; //!< Neighbor / Parent Set (\RFC{6550} Sec. 8.2.1)
 
     bool m_isRoot;
     std::set<uint32_t> m_interfaceExclusions;

@@ -105,7 +105,8 @@ Rpl::DoDispose()  //Dispose obhect
     }
 
     m_ipv6 = nullptr;
-    m_routes.clear();
+    m_routingTable.Dispose();
+    m_neighborTable.Dispose();
     Ipv6RoutingProtocol::DoDispose();
 }
 
@@ -370,11 +371,8 @@ Rpl::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit /*unit*/) con
     *os << "  DODAGID: " << m_dodagId << " Rank: " << m_rank << "\n";
     *os << "  Parent: " << m_preferredParent << " parentRank=" << m_parentRank
         << " if=" << m_parentInterface << "\n";
-    for (const auto& route : m_routes)
-    {
-        *os << "  " << route.dest << "/" << int(route.prefix.GetPrefixLength()) << " via "
-            << route.nextHop << " if " << route.interface << "\n";
-    }
+    m_neighborTable.Print(stream);
+    m_routingTable.Print(stream);
 }
 
 void
@@ -529,16 +527,12 @@ Rpl::Receive(Ptr<Socket> socket)
     Address from;
     while (Ptr<Packet> packet = socket->RecvFrom(from))
     {
-        const uint32_t nodeId = GetObject<Node>()->GetId();
-        const uint32_t size0 = packet->GetSize();
-
         Inet6SocketAddress inetAddr = Inet6SocketAddress::ConvertFrom(from);
         Ipv6Address srcFrom = inetAddr.GetIpv6();
 
         uint32_t incomingIf = 0;
         Ipv6PacketInfoTag interfaceInfo;
-        const bool hadPktInfo = packet->RemovePacketTag(interfaceInfo);
-        if (hadPktInfo)
+        if (packet->RemovePacketTag(interfaceInfo))
         {
             for (uint32_t i = 0; i < m_ipv6->GetNInterfaces(); ++i)
             {
@@ -550,48 +544,26 @@ Rpl::Receive(Ptr<Socket> socket)
             }
         }
 
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=arrive size=" << size0 << " from=" << srcFrom
-                  << " pktInfo=" << hadPktInfo << " if=" << incomingIf << "\n";
-
         Ipv6Header ipv6Hdr;
         packet->RemoveHeader(ipv6Hdr);
         Ipv6Address dst = ipv6Hdr.GetDestination();
         Ipv6Address src = ipv6Hdr.GetSource().IsAny() ? srcFrom : ipv6Hdr.GetSource();
-        const uint32_t sizeAfterIpv6 = packet->GetSize();
-
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=remove-ipv6 src=" << src << " dst=" << dst
-                  << " nextHeader=" << int(ipv6Hdr.GetNextHeader())
-                  << " remain=" << sizeAfterIpv6 << "\n";
 
         Icmpv6Header icmp;
         packet->RemoveHeader(icmp);
-        const uint32_t sizeAfterIcmp = packet->GetSize();
-
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=remove-icmpv6 type=" << int(icmp.GetType())
-                  << " code=" << int(icmp.GetCode()) << " remain=" << sizeAfterIcmp << "\n";
-
         if (icmp.GetType() != RPL_ICMPV6_TYPE)
         {
-            std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                      << " step=drop reason=non-rpl-type\n";
             continue;
         }
 
         auto code = static_cast<RplIcmpv6Code>(icmp.GetCode());
         if (code == RplIcmpv6Code::DIO)
         {
-            std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                      << " step=dispatch code=DIO -> HandleDio\n";
             HandleDio(packet, src, dst, incomingIf);
         }
         else
         {
-            std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                      << " step=drop reason=unimplemented-rpl-code code=" << int(icmp.GetCode())
-                      << "\n";
+            NS_LOG_LOGIC("Ignore unimplemented RPL code " << int(icmp.GetCode()));
         }
     }
 }
@@ -601,77 +573,42 @@ Rpl::HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t in
 {
     NS_LOG_FUNCTION(this << src << dst << interface);
 
-    const uint32_t nodeId = GetObject<Node>()->GetId();
-    const uint32_t sizeBeforeDio = packet->GetSize();
-
-    if (IsLocalAddress(src))
+    if (IsLocalAddress(src) || m_isRoot)
     {
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=handle-dio action=ignore-own-echo src=" << src
-                  << " size=" << sizeBeforeDio << "\n";
-        return;
-    }
-
-    // Root は他ノードの DIO から親を選ばない。
-    if (m_isRoot)
-    {
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=handle-dio action=ignore-as-root src=" << src
-                  << " size=" << sizeBeforeDio << "\n";
         return;
     }
 
     DioBaseObjectHeader dio;
     if (packet->GetSize() < dio.GetSerializedSize())
     {
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=handle-dio action=drop-too-short size=" << sizeBeforeDio
-                  << " need=" << dio.GetSerializedSize() << "\n";
+        NS_LOG_WARN("Drop DIO: too short size=" << packet->GetSize());
         return;
     }
     packet->RemoveHeader(dio);
-    const uint32_t sizeAfterDio = packet->GetSize();
 
-    std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-              << " step=remove-dio sizeBefore=" << sizeBeforeDio << " sizeAfter=" << sizeAfterDio
-              << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId()
-              << " Instance=" << int(dio.GetRplInstanceId()) << "\n";
-
-    std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Rx] node=" << nodeId << " src=" << src
-              << " dst=" << dst << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId()
-              << "\n";
-
-    // 別 RPL Instance の DIO は無視。
     if (dio.GetRplInstanceId() != m_rplInstanceId)
     {
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=handle-dio action=ignore-instance got="
-                  << int(dio.GetRplInstanceId()) << " want=" << int(m_rplInstanceId) << "\n";
         return;
     }
 
-    // 参加済みなら別 DODAG の DIO は無視。
     if (m_joined && dio.GetDodagId() != m_dodagId)
     {
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=handle-dio action=ignore-other-dodag got=" << dio.GetDodagId()
-                  << " want=" << m_dodagId << "\n";
         return;
     }
 
-    // 未参加、または現親より小さい Rank のときだけ親を採用／切替。
+    m_neighborTable.AddOrUpdate(src,
+                                interface,
+                                dio.GetRank(),
+                                dio.GetDodagId(),
+                                dio.GetRplInstanceId(),
+                                dio.GetVersionNumber(),
+                                dio.GetDtsn(),
+                                dio.GetModeOfOperation(),
+                                dio.GetDodagPreference());
+
     if (!m_joined || dio.GetRank() < m_parentRank)
     {
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=handle-dio action=accept-parent joined=" << m_joined
-                  << " dioRank=" << dio.GetRank() << " parentRank=" << m_parentRank << "\n";
         AcceptParent(src, interface, dio);
-    }
-    else
-    {
-        std::cout << Simulator::Now().As(Time::S) << " [RPL Recv] node=" << nodeId
-                  << " step=handle-dio action=keep-parent dioRank=" << dio.GetRank()
-                  << " parentRank=" << m_parentRank << "\n";
     }
 }
 
@@ -693,6 +630,8 @@ Rpl::AcceptParent(Ipv6Address parent, uint32_t interface, const DioBaseObjectHea
     m_mop = dio.GetModeOfOperation();
     m_dodagPreference = dio.GetDodagPreference();
     m_dtsn = dio.GetDtsn();
+
+    m_neighborTable.SetPreferredParent(parent);
 
     InstallParentDefaultRoute();
 
@@ -897,32 +836,26 @@ Rpl::Lookup(Ipv6Address dest, bool setSource, Ptr<NetDevice> oif)
         return rtentry;
     }
 
-    for (const auto& entry : m_routes)
+    int32_t oifIndex = -1;
+    if (oif)
     {
-        if (entry.prefix.IsMatch(dest, entry.dest))
+        oifIndex = m_ipv6->GetInterfaceForDevice(oif);
+    }
+
+    Ptr<RplRoutingTableEntry> found;
+    if (m_routingTable.LookUpEntry(dest, found, oifIndex))
+    {
+        longestMask = found->GetPrefix().GetPrefixLength();
+        rtentry = Create<Ipv6Route>();
+        if (setSource)
         {
-            if (oif && oif != m_ipv6->GetNetDevice(entry.interface))
-            {
-                continue;
-            }
-
-            uint16_t maskLen = entry.prefix.GetPrefixLength();
-            if (maskLen < longestMask)
-            {
-                continue;
-            }
-            longestMask = maskLen;
-
-            rtentry = Create<Ipv6Route>();
-            if (setSource)
-            {
-                rtentry->SetSource(
-                    m_ipv6->SourceAddressSelection(entry.interface, entry.dest));
-            }
-            rtentry->SetDestination(entry.dest);
-            rtentry->SetGateway(entry.nextHop);
-            rtentry->SetOutputDevice(m_ipv6->GetNetDevice(entry.interface));
+            rtentry->SetSource(m_ipv6->SourceAddressSelection(found->GetInterface(), dest));
         }
+        rtentry->SetDestination(found->GetDestination());
+        rtentry->SetGateway(found->GetNextHop());
+        rtentry->SetOutputDevice(m_ipv6->GetNetDevice(found->GetInterface()));
+        NS_LOG_LOGIC("Lookup dst=" << dest << " match=" << found->GetDestination() << "/"
+                                   << int(longestMask) << " via " << found->GetNextHop());
     }
 
     return rtentry;
@@ -936,12 +869,33 @@ Rpl::AddNetworkRouteTo(Ipv6Address network,
 {
     NS_LOG_FUNCTION(this << network << networkPrefix << nextHop << interface);
 
-    RplRouteEntry entry;
-    entry.dest = network;
-    entry.prefix = networkPrefix;
-    entry.nextHop = nextHop;
-    entry.interface = interface;
-    m_routes.push_back(entry);
+    RplRouteType type = RplRouteType::DOWNWARD;
+    if (nextHop.IsAny())
+    {
+        type = RplRouteType::LOCAL;
+    }
+    else if (network.IsAny() && networkPrefix.GetPrefixLength() == 0)
+    {
+        type = RplRouteType::UPWARD;
+    }
+
+    Ptr<RplRoutingTableEntry> existing;
+    if (m_routingTable.LookUpExact(network, networkPrefix, existing))
+    {
+        existing->SetNextHop(nextHop);
+        existing->SetInterface(interface);
+        existing->SetType(type);
+        existing->SetStatus(RplRouteStatus::VALID);
+        return;
+    }
+
+    Ptr<RplRoutingTableEntry> entry =
+        Create<RplRoutingTableEntry>(network, networkPrefix, nextHop, interface, type);
+    if (!m_routingTable.AddEntry(entry))
+    {
+        NS_LOG_WARN("Routing table full, cannot add " << network << "/"
+                                                      << int(networkPrefix.GetPrefixLength()));
+    }
 }
 
 void
@@ -949,17 +903,7 @@ Rpl::RemoveNetworkRoute(Ipv6Address network, Ipv6Prefix networkPrefix)
 {
     NS_LOG_FUNCTION(this << network << networkPrefix);
 
-    for (auto it = m_routes.begin(); it != m_routes.end();)
-    {
-        if (it->dest == network && it->prefix == networkPrefix)
-        {
-            it = m_routes.erase(it);
-        }
-        else
-        {
-            ++it;
-        }
-    }
+    m_routingTable.Delete(network, networkPrefix);
 }
 
 void
@@ -967,17 +911,7 @@ Rpl::InvalidateRoutesOnInterface(uint32_t interface)
 {
     NS_LOG_FUNCTION(this << interface);
 
-    for (auto it = m_routes.begin(); it != m_routes.end();)
-    {
-        if (it->interface == interface)
-        {
-            it = m_routes.erase(it);
-        }
-        else
-        {
-            ++it;
-        }
-    }
+    m_routingTable.DeleteByInterface(interface);
 }
 
 } // namespace ns3
