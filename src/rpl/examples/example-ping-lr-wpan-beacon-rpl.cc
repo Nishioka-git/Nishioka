@@ -102,7 +102,10 @@ main(int argc, char** argv)
                                    params);
 
     RplHelper rplHelper;
-    rplHelper.Set("DioInterval", TimeValue(Seconds(1.0)));
+    // 周期 DIO はシミュレーション時間内に出さない → JOIN は DIS 応答の DIO に依存。
+    rplHelper.Set("DioInterval", TimeValue(Seconds(100.0)));
+    rplHelper.Set("DisInterval", TimeValue(Seconds(0.5)));
+    rplHelper.Set("DisMaxAttempts", UintegerValue(8));
     InternetStackHelper internetv6;
     internetv6.SetRoutingHelper(rplHelper);
     internetv6.Install(nodes);
@@ -124,7 +127,8 @@ main(int argc, char** argv)
               << "Root=" << deviceInterfaces.GetAddress(0, 1)
               << "  N1=" << deviceInterfaces.GetAddress(1, 1)
               << "  N2=" << deviceInterfaces.GetAddress(2, 1) << "\n"
-              << "Expect: N1 parent=N0, N2 parent=N1; both have default route via parent.\n\n";
+              << "Mode: DIS-required JOIN (periodic DioInterval=100s).\n"
+              << "Expect: unjoined DIS -> joined DIO reply; N1 parent=N0, N2 parent=N1.\n\n";
 
     Simulator::Stop(Seconds(8));
     Simulator::Run();
@@ -141,7 +145,7 @@ main(int argc, char** argv)
     rpl1->PrintRoutingTable(routingStream);
     rpl2->PrintRoutingTable(routingStream);
 
-    // 期待: N0 Rank1、N1→N0 Rank2、N2→N1 Rank3（親チェーン）。
+    // 期待: N0 Rank1、N1→N0 Rank2、N2→N1 Rank3（DIS→DIO で形成）。
     const bool pass =
         rpl0->IsJoined() && rpl0->IsRoot() && rpl0->GetRank() == 1 &&
         rpl1->IsJoined() && rpl1->GetRank() == 2 && !rpl1->GetPreferredParent().IsAny() &&
@@ -151,7 +155,7 @@ main(int argc, char** argv)
     std::cout << "\n";
     if (pass)
     {
-        std::cout << "PASS: multi-hop parent selection "
+        std::cout << "PASS: DIS-solicited multi-hop join "
                      "(N1->root Rank2, N2->N1 Rank3).\n";
     }
     else

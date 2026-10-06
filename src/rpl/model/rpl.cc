@@ -34,6 +34,9 @@ Rpl::Rpl()
       m_initialized(false),
       m_multicastRecvSocket(nullptr),
       m_dioInterval(Seconds(1.0)),
+      m_disInterval(Seconds(0.5)),
+      m_disMaxAttempts(5),
+      m_disAttempts(0),
       m_rplInstanceId(0),
       m_versionNumber(1),
       m_dtsn(0),
@@ -70,6 +73,16 @@ Rpl::GetTypeId()
                           TimeValue(Seconds(1.0)),
                           MakeTimeAccessor(&Rpl::m_dioInterval),
                           MakeTimeChecker())
+            .AddAttribute("DisInterval",
+                          "Interval between DIS probes while the node is unjoined.",
+                          TimeValue(Seconds(0.5)),
+                          MakeTimeAccessor(&Rpl::m_disInterval),
+                          MakeTimeChecker())
+            .AddAttribute("DisMaxAttempts",
+                          "Maximum number of DIS transmissions while unjoined (0 = disabled).",
+                          UintegerValue(5),
+                          MakeUintegerAccessor(&Rpl::m_disMaxAttempts),
+                          MakeUintegerChecker<uint32_t>())
             .AddAttribute("RplInstanceId",
                           "RPLInstanceID advertised in DIO messages.",
                           UintegerValue(0),
@@ -89,6 +102,7 @@ Rpl::DoDispose()  //Dispose obhect
     NS_LOG_FUNCTION(this);
 
     m_dioTimerEvent.Cancel();
+    m_disTimerEvent.Cancel();
 
     for (auto& entry : m_sockets)
     {
@@ -106,7 +120,6 @@ Rpl::DoDispose()  //Dispose obhect
 
     m_ipv6 = nullptr;
     m_routingTable.Dispose();
-    m_neighborTable.Dispose();
     Ipv6RoutingProtocol::DoDispose();
 }
 
@@ -158,6 +171,11 @@ Rpl::DoInitialize()
         }
         m_rank = RPL_ROOT_RANK;
         ScheduleNextDio();
+    }
+    else
+    {
+        // 未参加ノードは DIS で近傍の DIO を催促する。
+        ScheduleNextDis();
     }
 
     Ipv6RoutingProtocol::DoInitialize();
@@ -305,6 +323,10 @@ Rpl::NotifyAddAddress(uint32_t interface, Ipv6InterfaceAddress address)
     if (m_initialized && address.GetScope() == Ipv6InterfaceAddress::LINKLOCAL)  //when initialized
     {
         BindToInterface(interface);
+        if (!m_isRoot && !m_joined)
+        {
+            ScheduleNextDis();
+        }
     }
 }
 
@@ -371,7 +393,6 @@ Rpl::PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit /*unit*/) con
     *os << "  DODAGID: " << m_dodagId << " Rank: " << m_rank << "\n";
     *os << "  Parent: " << m_preferredParent << " parentRank=" << m_parentRank
         << " if=" << m_parentInterface << "\n";
-    m_neighborTable.Print(stream);
     m_routingTable.Print(stream);
 }
 
@@ -423,10 +444,15 @@ Rpl::SetRoot(bool isRoot)
         {
             ScheduleNextDio();
         }
+        m_disTimerEvent.Cancel();
     }
     else
     {
         m_dioTimerEvent.Cancel();
+        if (!m_joined)
+        {
+            ScheduleNextDis();
+        }
     }
 }
 
@@ -561,6 +587,10 @@ Rpl::Receive(Ptr<Socket> socket)
         {
             HandleDio(packet, src, dst, incomingIf);
         }
+        else if (code == RplIcmpv6Code::DIS)
+        {
+            HandleDis(packet, src, dst, incomingIf);
+        }
         else
         {
             NS_LOG_LOGIC("Ignore unimplemented RPL code " << int(icmp.GetCode()));
@@ -596,20 +626,66 @@ Rpl::HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t in
         return;
     }
 
-    m_neighborTable.AddOrUpdate(src,
-                                interface,
-                                dio.GetRank(),
-                                dio.GetDodagId(),
-                                dio.GetRplInstanceId(),
-                                dio.GetVersionNumber(),
-                                dio.GetDtsn(),
-                                dio.GetModeOfOperation(),
-                                dio.GetDodagPreference());
-
     if (!m_joined || dio.GetRank() < m_parentRank)
     {
         AcceptParent(src, interface, dio);
     }
+}
+
+void
+Rpl::HandleDis(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t interface)
+{
+    NS_LOG_FUNCTION(this << src << dst << interface);
+
+    if (IsLocalAddress(src))
+    {
+        return;
+    }
+
+    // 未参加ノードは応答する DIO を持たない。
+    if (!m_joined)
+    {
+        return;
+    }
+
+    DisBaseObjectHeader dis;
+    if (packet->GetSize() < dis.GetSerializedSize())
+    {
+        NS_LOG_WARN("Drop DIS: too short size=" << packet->GetSize());
+        return;
+    }
+    packet->RemoveHeader(dis);
+
+    const uint32_t nodeId = GetObject<Node>()->GetId();
+    const bool unicast = !dst.IsMulticast();
+
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DIS Rx] node=" << nodeId << " src=" << src
+              << " dst=" << dst << " unicast=" << unicast << "\n";
+
+    Ptr<Socket> socket = nullptr;
+    for (const auto& entry : m_sockets)
+    {
+        if (entry.second == interface)
+        {
+            socket = entry.first;
+            break;
+        }
+    }
+    if (!socket && !m_sockets.empty())
+    {
+        socket = m_sockets.begin()->first;
+        interface = m_sockets.begin()->second;
+    }
+    if (!socket)
+    {
+        NS_LOG_WARN("No socket to reply DIO for DIS");
+        return;
+    }
+
+    // \RFC{6550} Sec. 8.3 (simplified, no Trickle):
+    // unicast DIS -> unicast DIO; multicast DIS -> multicast DIO.
+    Ipv6Address replyDst = unicast ? src : RPL_ALL_NODES_MULTICAST;
+    SendDioOnInterface(interface, socket, replyDst);
 }
 
 void
@@ -631,9 +707,9 @@ Rpl::AcceptParent(Ipv6Address parent, uint32_t interface, const DioBaseObjectHea
     m_dodagPreference = dio.GetDodagPreference();
     m_dtsn = dio.GetDtsn();
 
-    m_neighborTable.SetPreferredParent(parent);
-
     InstallParentDefaultRoute();
+
+    m_disTimerEvent.Cancel();
 
     std::cout << Simulator::Now().As(Time::S) << " [RPL Parent] node=" << GetObject<Node>()->GetId()
               << " parent=" << m_preferredParent << " parentRank=" << m_parentRank
@@ -687,6 +763,96 @@ Rpl::BuildDioHeader() const
 }
 
 void
+Rpl::SendDis()
+{
+    NS_LOG_FUNCTION(this);
+
+    if (m_joined || m_isRoot)
+    {
+        return;
+    }
+
+    if (m_disMaxAttempts == 0 || m_disAttempts >= m_disMaxAttempts)
+    {
+        return;
+    }
+
+    if (m_sockets.empty())
+    {
+        ScheduleNextDis();
+        return;
+    }
+
+    for (const auto& entry : m_sockets)
+    {
+        SendDisOnInterface(entry.second, entry.first);
+    }
+    ++m_disAttempts;
+    ScheduleNextDis();
+}
+
+void
+Rpl::SendDisOnInterface(uint32_t interface, Ptr<Socket> socket)
+{
+    NS_LOG_FUNCTION(this << interface << socket);
+
+    Ipv6Address src = GetLinkLocalAddress(interface);
+    if (src.IsAny())
+    {
+        NS_LOG_LOGIC("Skip DIS on if " << interface << ": no link-local");
+        return;
+    }
+
+    DisBaseObjectHeader dis;
+    Ptr<Packet> packet = Create<Packet>();
+    packet->AddHeader(dis);
+
+    Icmpv6Header icmp;
+    icmp.SetType(RPL_ICMPV6_TYPE);
+    icmp.SetCode(static_cast<uint8_t>(RplIcmpv6Code::DIS));
+    uint16_t payloadLen = icmp.GetSerializedSize() + dis.GetSerializedSize();
+    icmp.CalculatePseudoHeaderChecksum(src,
+                                       RPL_ALL_NODES_MULTICAST,
+                                       payloadLen,
+                                       Ipv6Header::IPV6_ICMPV6);
+    packet->AddHeader(icmp);
+
+    SocketIpv6HopLimitTag hopLimitTag;
+    hopLimitTag.SetHopLimit(255);
+    packet->AddPacketTag(hopLimitTag);
+
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DIS Tx] node=" << GetObject<Node>()->GetId()
+              << " if=" << interface << " src=" << src << " dst=" << RPL_ALL_NODES_MULTICAST
+              << " attempt=" << (m_disAttempts + 1) << "/" << m_disMaxAttempts << "\n";
+
+    int sent = socket->SendTo(packet, 0, Inet6SocketAddress(RPL_ALL_NODES_MULTICAST, 0));
+    if (sent <= 0)
+    {
+        NS_LOG_WARN("DIS SendTo failed on interface " << interface);
+    }
+}
+
+void
+Rpl::ScheduleNextDis()
+{
+    NS_LOG_FUNCTION(this);
+    m_disTimerEvent.Cancel();
+    if (m_joined || m_isRoot)
+    {
+        return;
+    }
+    if (m_disMaxAttempts == 0 || m_disAttempts >= m_disMaxAttempts)
+    {
+        return;
+    }
+    if (!m_disInterval.IsStrictlyPositive())
+    {
+        return;
+    }
+    m_disTimerEvent = Simulator::Schedule(m_disInterval, &Rpl::SendDis, this);
+}
+
+void
 Rpl::SendDio()
 {
     NS_LOG_FUNCTION(this);
@@ -719,16 +885,31 @@ Rpl::SendDio()
 
     for (const auto& entry : m_sockets)
     {
-        SendDioOnInterface(entry.second, entry.first);
+        SendDioOnInterface(entry.second, entry.first, RPL_ALL_NODES_MULTICAST);
     }
 
     ScheduleNextDio();
 }
 
 void
-Rpl::SendDioOnInterface(uint32_t interface, Ptr<Socket> socket)
+Rpl::SendDioOnInterface(uint32_t interface, Ptr<Socket> socket, Ipv6Address dst)
 {
-    NS_LOG_FUNCTION(this << interface << socket);
+    NS_LOG_FUNCTION(this << interface << socket << dst);
+
+    if (!m_joined)
+    {
+        return;
+    }
+
+    if (m_isRoot && m_dodagId.IsAny())
+    {
+        m_dodagId = SelectDodagId(interface);
+    }
+    if (m_dodagId.IsAny())
+    {
+        NS_LOG_WARN("Cannot send DIO: DODAGID not set yet");
+        return;
+    }
 
     Ipv6Address src = GetLinkLocalAddress(interface);
     if (src.IsAny())
@@ -745,10 +926,7 @@ Rpl::SendDioOnInterface(uint32_t interface, Ptr<Socket> socket)
     icmp.SetType(RPL_ICMPV6_TYPE);
     icmp.SetCode(static_cast<uint8_t>(RplIcmpv6Code::DIO));
     uint16_t payloadLen = icmp.GetSerializedSize() + dio.GetSerializedSize();
-    icmp.CalculatePseudoHeaderChecksum(src,
-                                       RPL_ALL_NODES_MULTICAST,
-                                       payloadLen,
-                                       Ipv6Header::IPV6_ICMPV6);
+    icmp.CalculatePseudoHeaderChecksum(src, dst, payloadLen, Ipv6Header::IPV6_ICMPV6);
     packet->AddHeader(icmp);
 
     // \RFC{6550} Sec. 6: RPL Control messages use Hop Limit 255.
@@ -757,10 +935,10 @@ Rpl::SendDioOnInterface(uint32_t interface, Ptr<Socket> socket)
     packet->AddPacketTag(hopLimitTag);
 
     std::cout << Simulator::Now().As(Time::S) << " [RPL DIO Tx] node=" << GetObject<Node>()->GetId()
-              << " if=" << interface << " src=" << src << " dst=" << RPL_ALL_NODES_MULTICAST
+              << " if=" << interface << " src=" << src << " dst=" << dst
               << " Rank=" << dio.GetRank() << " DODAGID=" << dio.GetDodagId() << "\n";
 
-    int sent = socket->SendTo(packet, 0, Inet6SocketAddress(RPL_ALL_NODES_MULTICAST, 0));
+    int sent = socket->SendTo(packet, 0, Inet6SocketAddress(dst, 0));
     if (sent <= 0)
     {
         NS_LOG_WARN("DIO SendTo failed on interface " << interface);

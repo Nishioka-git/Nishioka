@@ -32,10 +32,11 @@ static const Ipv6Address RPL_ALL_NODES_MULTICAST("ff02::1a");
  * @ingroup rpl
  * @brief RPL ルーティングプロトコル（\RFC{6550}）
  *
- * Upward path (minimal): DIO exchange, preferred-parent selection by
- * lowest Rank, own Rank = parent Rank + 1, default route via parent,
- * and periodic DIO from joined nodes. DIS / DAO / Trickle are not
- * implemented.
+ * Upward path (minimal): unjoined nodes solicit with DIS (no options);
+ * joined nodes answer with DIO (\RFC{6550} Sec. 8.3 simplified, no Trickle).
+ * Preferred-parent selection by lowest Rank, own Rank = parent Rank + 1,
+ * default route via parent, and optional periodic DIO from joined nodes.
+ * DAO is not implemented.
  */
 class Rpl : public Ipv6RoutingProtocol
 {
@@ -112,6 +113,7 @@ class Rpl : public Ipv6RoutingProtocol
     void UnbindFromInterface(uint32_t interface);
     void Receive(Ptr<Socket> socket);
     void HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t interface);
+    void HandleDis(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t interface);
 
     /**
      * @brief 受信 DIO から preferred parent を採用／切替し、自 Rank とルートを更新する。
@@ -128,8 +130,12 @@ class Rpl : public Ipv6RoutingProtocol
      */
     bool IsLocalAddress(Ipv6Address addr) const;
 
+    void SendDis();
+    void SendDisOnInterface(uint32_t interface, Ptr<Socket> socket);
+    void ScheduleNextDis();
+
     void SendDio();
-    void SendDioOnInterface(uint32_t interface, Ptr<Socket> socket);
+    void SendDioOnInterface(uint32_t interface, Ptr<Socket> socket, Ipv6Address dst);
     void ScheduleNextDio();
     DioBaseObjectHeader BuildDioHeader() const;
     Ipv6Address SelectDodagId(uint32_t interface) const;
@@ -147,8 +153,7 @@ class Rpl : public Ipv6RoutingProtocol
     void InvalidateRoutesOnInterface(uint32_t interface);
 
     Ptr<Ipv6> m_ipv6;
-    RplRoutingTable m_routingTable;   //!< Forwarding table (\RFC{6550} Sec. 9 / 10)
-    RplNeighborTable m_neighborTable; //!< Neighbor / Parent Set (\RFC{6550} Sec. 8.2.1)
+    RplRoutingTable m_routingTable; //!< Forwarding table (\RFC{6550} Sec. 9 / 10)
 
     bool m_isRoot;
     std::set<uint32_t> m_interfaceExclusions;
@@ -159,6 +164,10 @@ class Rpl : public Ipv6RoutingProtocol
 
     Time m_dioInterval;
     EventId m_dioTimerEvent;
+    Time m_disInterval;       //!< Interval between DIS probes while unjoined
+    uint32_t m_disMaxAttempts; //!< Max DIS transmissions before giving up
+    uint32_t m_disAttempts;    //!< DIS transmissions so far
+    EventId m_disTimerEvent;
     uint8_t m_rplInstanceId;
     uint8_t m_versionNumber;
     uint8_t m_dtsn;
