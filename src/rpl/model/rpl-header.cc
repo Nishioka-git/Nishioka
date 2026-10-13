@@ -589,4 +589,75 @@ operator<<(std::ostream& os, const DaoAckBaseObjectHeader& h)
     return os;
 }
 
+/*
+ * RplHopCountHeader — hop-count path metric carried after the DIO base object.
+ */
+
+NS_OBJECT_ENSURE_REGISTERED(RplHopCountHeader);
+
+RplHopCountHeader::RplHopCountHeader()
+    : m_hopCount(0)
+{
+}
+
+TypeId
+RplHopCountHeader::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::RplHopCountHeader")
+                            .SetParent<Header>()
+                            .SetGroupName("Rpl")
+                            .AddConstructor<RplHopCountHeader>();
+    return tid;
+}
+
+TypeId
+RplHopCountHeader::GetInstanceTypeId() const
+{
+    return GetTypeId();
+}
+
+uint32_t
+RplHopCountHeader::GetSerializedSize() const
+{
+    return 2;
+}
+
+void
+RplHopCountHeader::Serialize(Buffer::Iterator start) const
+{
+    start.WriteHtonU16(m_hopCount);
+}
+
+uint32_t
+RplHopCountHeader::Deserialize(Buffer::Iterator start)
+{
+    m_hopCount = start.ReadNtohU16();
+    return GetSerializedSize();
+}
+
+void
+RplHopCountHeader::Print(std::ostream& os) const
+{
+    os << "HopCount=" << m_hopCount;
+}
+
+void
+RplHopCountHeader::SetHopCount(uint16_t hops)
+{
+    m_hopCount = hops;
+}
+
+uint16_t
+RplHopCountHeader::GetHopCount() const
+{
+    return m_hopCount;
+}
+
+std::ostream&
+operator<<(std::ostream& os, const RplHopCountHeader& h)
+{
+    h.Print(os);
+    return os;
+}
+
 } // namespace ns3

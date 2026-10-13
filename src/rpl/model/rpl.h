@@ -7,6 +7,7 @@
 #include "ns3/ipv6-routing-protocol.h"
 #include "ns3/ipv6.h"
 #include "ns3/nstime.h"
+#include "ns3/trickle-timer.h"
 
 #include <map>
 #include <set>
@@ -32,11 +33,13 @@ static const Ipv6Address RPL_ALL_NODES_MULTICAST("ff02::1a");
  * @ingroup rpl
  * @brief RPL ルーティングプロトコル（\RFC{6550}）
  *
- * Upward path (minimal): unjoined nodes solicit with DIS (no options);
- * joined nodes answer with DIO (\RFC{6550} Sec. 8.3 simplified, no Trickle).
- * Preferred-parent selection by lowest Rank, own Rank = parent Rank + 1,
- * default route via parent, and optional periodic DIO from joined nodes.
- * DAO is not implemented.
+ * Upward path (minimal): unjoined nodes solicit with DIS (no options).
+ * Joined nodes advertise with DIO under a Trickle timer (\RFC{6550} Sec. 8.3,
+ * \RFC{6206}). Multicast DIS is an inconsistency and resets Trickle.
+ * Unicast DIS is answered with one unicast DIO and does not reset Trickle.
+ * Preferred-parent selection by lowest Rank, then by hop-count path metric.
+ * Own Rank = parent Rank + 1. Hop count is carried after the DIO base object.
+ * Default route via parent. DAO is not implemented.
  */
 class Rpl : public Ipv6RoutingProtocol
 {
@@ -104,6 +107,16 @@ class Rpl : public Ipv6RoutingProtocol
      */
     uint16_t GetRank() const;
 
+    /**
+     * @return 根からのホップ数。未参加は 0。
+     */
+    uint16_t GetPathMetric() const;
+
+    uint32_t GetDisTxCount() const;
+    uint32_t GetDisRxCount() const;
+    uint32_t GetDioTxCount() const;
+    uint32_t GetDioRxCount() const;
+
   protected:
     void DoDispose() override;
     void DoInitialize() override;
@@ -118,7 +131,10 @@ class Rpl : public Ipv6RoutingProtocol
     /**
      * @brief 受信 DIO から preferred parent を採用／切替し、自 Rank とルートを更新する。
      */
-    void AcceptParent(Ipv6Address parent, uint32_t interface, const DioBaseObjectHeader& dio);
+    void AcceptParent(Ipv6Address parent,
+                      uint32_t interface,
+                      const DioBaseObjectHeader& dio,
+                      uint16_t parentHopCount);
 
     /**
      * @brief 親向けデフォルトルート（::/0）を入れ替える。
@@ -134,9 +150,11 @@ class Rpl : public Ipv6RoutingProtocol
     void SendDisOnInterface(uint32_t interface, Ptr<Socket> socket);
     void ScheduleNextDis();
 
+    void ConfigureTrickle();
+    void StartTrickle();
+    void StopTrickle();
     void SendDio();
     void SendDioOnInterface(uint32_t interface, Ptr<Socket> socket, Ipv6Address dst);
-    void ScheduleNextDio();
     DioBaseObjectHeader BuildDioHeader() const;
     Ipv6Address SelectDodagId(uint32_t interface) const;
     Ipv6Address GetLinkLocalAddress(uint32_t interface) const;
@@ -162,8 +180,11 @@ class Rpl : public Ipv6RoutingProtocol
     std::map<Ptr<Socket>, uint32_t> m_sockets;
     Ptr<Socket> m_multicastRecvSocket;
 
-    Time m_dioInterval;
-    EventId m_dioTimerEvent;
+    uint8_t m_dioIntervalMin;       //!< DIOIntervalMin。Imin = 2^この値 ミリ秒
+    uint8_t m_dioIntervalDoublings; //!< DIOIntervalDoublings。Imax = Imin × 2^この値
+    uint16_t m_dioRedundancy;       //!< DIORedundancyConstant。0 は抑制なし
+    TrickleTimer m_trickle;         //!< 参加ノードの DIO 送信タイマー
+    bool m_trickleStarted;
     Time m_disInterval;       //!< Interval between DIS probes while unjoined
     uint32_t m_disMaxAttempts; //!< Max DIS transmissions before giving up
     uint32_t m_disAttempts;    //!< DIS transmissions so far
@@ -181,6 +202,12 @@ class Rpl : public Ipv6RoutingProtocol
     Ipv6Address m_preferredParent; //!< 親の link-local（未設定は ::）
     uint32_t m_parentInterface;    //!< 親方向の出力 IF
     uint16_t m_parentRank;         //!< 親が DIO で広告した Rank（切替比較・自 Rank 計算用）
+    uint16_t m_pathMetric;         //!< 根からのホップ数（根は 0）
+    uint16_t m_parentPathMetric;   //!< 親が広告したホップ数
+    uint32_t m_disTx;              //!< 送信した DIS 数
+    uint32_t m_disRx;              //!< 他ノードから受信した DIS 数
+    uint32_t m_dioTx;              //!< 送信した DIO 数
+    uint32_t m_dioRx;              //!< 他ノードから受信した DIO 数
 };
 
 } // namespace ns3

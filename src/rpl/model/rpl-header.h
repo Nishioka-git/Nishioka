@@ -453,6 +453,34 @@ class DaoAckBaseObjectHeader : public Header
 
 std::ostream& operator<<(std::ostream& os, const DaoAckBaseObjectHeader& h);
 
+/**
+ * @ingroup rpl
+ * @brief ホップ数パスメトリック
+ *
+ * 根からのホップ数。DIO Base の直後に載せる。
+ * Rank が同じ候補では、この値が小さい親を優先する。
+ */
+class RplHopCountHeader : public Header
+{
+  public:
+    RplHopCountHeader();
+
+    static TypeId GetTypeId();
+    TypeId GetInstanceTypeId() const override;
+    uint32_t GetSerializedSize() const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    void Print(std::ostream& os) const override;
+
+    void SetHopCount(uint16_t hops);
+    uint16_t GetHopCount() const;
+
+  private:
+    uint16_t m_hopCount;
+};
+
+std::ostream& operator<<(std::ostream& os, const RplHopCountHeader& h);
+
 } // namespace ns3
 
 #endif /* RPL_HEADER_H */
