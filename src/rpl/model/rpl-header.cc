@@ -589,4 +589,229 @@ operator<<(std::ostream& os, const DaoAckBaseObjectHeader& h)
     return os;
 }
 
+/*
+ * RplTargetOptionHeader — \RFC{6550} Section 6.7.7 (Figure 28)
+ */
+
+NS_OBJECT_ENSURE_REGISTERED(RplTargetOptionHeader);
+
+RplTargetOptionHeader::RplTargetOptionHeader()
+    : m_prefixLength(128),
+      m_target(Ipv6Address::GetZero())
+{
+}
+
+TypeId
+RplTargetOptionHeader::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::RplTargetOptionHeader")
+                            .SetParent<Header>()
+                            .SetGroupName("Rpl")
+                            .AddConstructor<RplTargetOptionHeader>();
+    return tid;
+}
+
+TypeId
+RplTargetOptionHeader::GetInstanceTypeId() const
+{
+    return GetTypeId();
+}
+
+uint32_t
+RplTargetOptionHeader::GetSerializedSize() const
+{
+    // Type(1) + Length(1) + Flags(1) + PrefixLength(1) + prefix bytes
+    return 4 + (m_prefixLength + 7) / 8;
+}
+
+void
+RplTargetOptionHeader::Serialize(Buffer::Iterator start) const
+{
+    Buffer::Iterator i = start;
+    const uint8_t prefixBytes = (m_prefixLength + 7) / 8;
+
+    i.WriteU8(static_cast<uint8_t>(DaoOptions::RPL_TARGET));
+    i.WriteU8(2 + prefixBytes); // Option Length
+    i.WriteU8(0);               // Flags
+    i.WriteU8(m_prefixLength);
+
+    uint8_t buf[16];
+    m_target.Serialize(buf);
+    i.Write(buf, prefixBytes);
+}
+
+uint32_t
+RplTargetOptionHeader::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+    i.ReadU8(); // Type
+    i.ReadU8(); // Option Length
+    i.ReadU8(); // Flags
+    m_prefixLength = i.ReadU8();
+    if (m_prefixLength > 128)
+    {
+        m_prefixLength = 128;
+    }
+
+    uint8_t buf[16] = {0};
+    i.Read(buf, (m_prefixLength + 7) / 8);
+    m_target.Set(buf);
+    return GetSerializedSize();
+}
+
+void
+RplTargetOptionHeader::Print(std::ostream& os) const
+{
+    os << "RPL Target " << m_target << "/" << int(m_prefixLength);
+}
+
+void
+RplTargetOptionHeader::SetTarget(Ipv6Address target, uint8_t prefixLength)
+{
+    m_prefixLength = prefixLength > 128 ? 128 : prefixLength;
+    m_target = target.CombinePrefix(Ipv6Prefix(m_prefixLength));
+}
+
+Ipv6Address
+RplTargetOptionHeader::GetTarget() const
+{
+    return m_target;
+}
+
+uint8_t
+RplTargetOptionHeader::GetPrefixLength() const
+{
+    return m_prefixLength;
+}
+
+std::ostream&
+operator<<(std::ostream& os, const RplTargetOptionHeader& h)
+{
+    h.Print(os);
+    return os;
+}
+
+/*
+ * TransitInformationOptionHeader — \RFC{6550} Section 6.7.8 (Figure 29)
+ */
+
+NS_OBJECT_ENSURE_REGISTERED(TransitInformationOptionHeader);
+
+TransitInformationOptionHeader::TransitInformationOptionHeader()
+    : m_external(false),
+      m_pathControl(0),
+      m_pathSequence(0),
+      m_pathLifetime(0xFF)
+{
+}
+
+TypeId
+TransitInformationOptionHeader::GetTypeId()
+{
+    static TypeId tid = TypeId("ns3::TransitInformationOptionHeader")
+                            .SetParent<Header>()
+                            .SetGroupName("Rpl")
+                            .AddConstructor<TransitInformationOptionHeader>();
+    return tid;
+}
+
+TypeId
+TransitInformationOptionHeader::GetInstanceTypeId() const
+{
+    return GetTypeId();
+}
+
+uint32_t
+TransitInformationOptionHeader::GetSerializedSize() const
+{
+    return 6;
+}
+
+void
+TransitInformationOptionHeader::Serialize(Buffer::Iterator start) const
+{
+    Buffer::Iterator i = start;
+    i.WriteU8(static_cast<uint8_t>(DaoOptions::TRANSIT_INFORMATION));
+    i.WriteU8(4); // Option Length (no Parent Address)
+    i.WriteU8(m_external ? 0x80 : 0x00);
+    i.WriteU8(m_pathControl);
+    i.WriteU8(m_pathSequence);
+    i.WriteU8(m_pathLifetime);
+}
+
+uint32_t
+TransitInformationOptionHeader::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+    i.ReadU8(); // Type
+    i.ReadU8(); // Option Length
+    m_external = (i.ReadU8() & 0x80) != 0;
+    m_pathControl = i.ReadU8();
+    m_pathSequence = i.ReadU8();
+    m_pathLifetime = i.ReadU8();
+    return GetSerializedSize();
+}
+
+void
+TransitInformationOptionHeader::Print(std::ostream& os) const
+{
+    os << "Transit Information E=" << m_external << " PathControl=" << int(m_pathControl)
+       << " PathSequence=" << int(m_pathSequence) << " PathLifetime=" << int(m_pathLifetime);
+}
+
+void
+TransitInformationOptionHeader::SetExternal(bool external)
+{
+    m_external = external;
+}
+
+bool
+TransitInformationOptionHeader::IsExternal() const
+{
+    return m_external;
+}
+
+void
+TransitInformationOptionHeader::SetPathControl(uint8_t pathControl)
+{
+    m_pathControl = pathControl;
+}
+
+uint8_t
+TransitInformationOptionHeader::GetPathControl() const
+{
+    return m_pathControl;
+}
+
+void
+TransitInformationOptionHeader::SetPathSequence(uint8_t pathSequence)
+{
+    m_pathSequence = pathSequence;
+}
+
+uint8_t
+TransitInformationOptionHeader::GetPathSequence() const
+{
+    return m_pathSequence;
+}
+
+void
+TransitInformationOptionHeader::SetPathLifetime(uint8_t pathLifetime)
+{
+    m_pathLifetime = pathLifetime;
+}
+
+uint8_t
+TransitInformationOptionHeader::GetPathLifetime() const
+{
+    return m_pathLifetime;
+}
+
+std::ostream&
+operator<<(std::ostream& os, const TransitInformationOptionHeader& h)
+{
+    h.Print(os);
+    return os;
+}
+
 } // namespace ns3

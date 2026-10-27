@@ -121,6 +121,12 @@ class RplRoutingTable
     void Print(Ptr<OutputStreamWrapper> stream) const;
 
     uint32_t GetSize() const;
+
+    /**
+     * @return all stored entries (read-only view; used to collect DAO targets)
+     */
+    const std::vector<Ptr<RplRoutingTableEntry>>& GetEntries() const;
+
     void SetMaxTableSize(uint32_t size);
     uint32_t GetMaxTableSize() const;
 

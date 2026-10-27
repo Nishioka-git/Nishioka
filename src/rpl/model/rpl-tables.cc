@@ -367,6 +367,12 @@ RplRoutingTable::GetSize() const
     return static_cast<uint32_t>(m_routingTable.size());
 }
 
+const std::vector<Ptr<RplRoutingTableEntry>>&
+RplRoutingTable::GetEntries() const
+{
+    return m_routingTable;
+}
+
 void
 RplRoutingTable::SetMaxTableSize(uint32_t size)
 {

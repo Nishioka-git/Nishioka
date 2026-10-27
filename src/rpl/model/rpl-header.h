@@ -453,6 +453,113 @@ class DaoAckBaseObjectHeader : public Header
 
 std::ostream& operator<<(std::ostream& os, const DaoAckBaseObjectHeader& h);
 
+/**
+ * @ingroup rpl
+ * @brief RPL Target option (\RFC{6550} Section 6.7.7, Figure 28)
+ *
+ * "The RPL Target option is used to indicate a target IPv6 address,
+ *  prefix, or multicast group that is reachable or queried along the
+ *  DODAG.  The RPL Target option MAY be included in a DAO message."
+ *
+ * Option Length = 2 + number of prefix bytes carried.  Only
+ * ceil(PrefixLength / 8) bytes of the Target Prefix are carried.
+ *
+ * \verbatim
+  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |   Type = 0x05 | Option Length |     Flags     | Prefix Length |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                Target Prefix (Variable Length)                |
+ .                                                               .
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * \endverbatim
+ */
+class RplTargetOptionHeader : public Header
+{
+  public:
+    RplTargetOptionHeader();
+
+    static TypeId GetTypeId();
+    TypeId GetInstanceTypeId() const override;
+    uint32_t GetSerializedSize() const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    void Print(std::ostream& os) const override;
+
+    /**
+     * @brief Set the target address and prefix length (bits, 0..128).
+     */
+    void SetTarget(Ipv6Address target, uint8_t prefixLength = 128);
+    Ipv6Address GetTarget() const;
+    uint8_t GetPrefixLength() const;
+
+  private:
+    uint8_t m_prefixLength; //!< Prefix Length (bits)
+    Ipv6Address m_target;   //!< Target Prefix (bits beyond PrefixLength are zero)
+};
+
+std::ostream& operator<<(std::ostream& os, const RplTargetOptionHeader& h);
+
+/**
+ * @ingroup rpl
+ * @brief Transit Information option (\RFC{6550} Section 6.7.8, Figure 29)
+ *
+ * "The Transit Information option is used for a node to indicate
+ *  attributes for a path to one or more destinations.  The destinations
+ *  are indicated by one or more Target options that immediately precede
+ *  the Transit Information option(s)."
+ *
+ * Only the form without the optional Parent Address (Non-Storing mode) is
+ * implemented: Option Length = 4.
+ *
+ * \verbatim
+  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |   Type = 0x06 | Option Length |E|    Flags    | Path Control  |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ | Path Sequence | Path Lifetime |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * \endverbatim
+ *
+ * Path Lifetime 0x00 means "No-Path" (route withdrawal); 0xFF means infinite.
+ */
+class TransitInformationOptionHeader : public Header
+{
+  public:
+    TransitInformationOptionHeader();
+
+    static TypeId GetTypeId();
+    TypeId GetInstanceTypeId() const override;
+    uint32_t GetSerializedSize() const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    void Print(std::ostream& os) const override;
+
+    /** \RFC{6550} Sec. 6.7.8: E flag (external route) */
+    void SetExternal(bool external);
+    bool IsExternal() const;
+
+    void SetPathControl(uint8_t pathControl);
+    uint8_t GetPathControl() const;
+
+    void SetPathSequence(uint8_t pathSequence);
+    uint8_t GetPathSequence() const;
+
+    /** 0x00: No-Path, 0xFF: infinite */
+    void SetPathLifetime(uint8_t pathLifetime);
+    uint8_t GetPathLifetime() const;
+
+  private:
+    bool m_external;        //!< E flag
+    uint8_t m_pathControl;  //!< Path Control
+    uint8_t m_pathSequence; //!< Path Sequence
+    uint8_t m_pathLifetime; //!< Path Lifetime
+};
+
+std::ostream& operator<<(std::ostream& os, const TransitInformationOptionHeader& h);
+
 } // namespace ns3
 
 #endif /* RPL_HEADER_H */

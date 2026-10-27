@@ -1,6 +1,7 @@
 #include "rpl.h"
 
 #include "ns3/boolean.h"
+#include "ns3/enum.h"
 #include "ns3/icmpv6-header.h"
 #include "ns3/ipv6-header.h"
 #include "ns3/ipv6-packet-info-tag.h"
@@ -33,7 +34,10 @@ Rpl::Rpl()
       m_isRoot(false),
       m_initialized(false),
       m_multicastRecvSocket(nullptr),
-      m_dioInterval(Seconds(1.0)),
+      m_dioIntervalMin(3),
+      m_dioIntervalDoublings(20),
+      m_dioRedundancy(10),
+      m_trickleStarted(false),
       m_disInterval(Seconds(0.5)),
       m_disMaxAttempts(5),
       m_disAttempts(0),
@@ -47,7 +51,10 @@ Rpl::Rpl()
       m_joined(false),
       m_preferredParent(Ipv6Address::GetZero()),
       m_parentInterface(0),
-      m_parentRank(0)
+      m_parentRank(0),
+      m_daoDelay(Seconds(1)),
+      m_daoSequence(0),
+      m_pathSequence(0)
 {
 }
 
@@ -68,11 +75,21 @@ Rpl::GetTypeId()
                           BooleanValue(false),
                           MakeBooleanAccessor(&Rpl::m_isRoot),
                           MakeBooleanChecker())
-            .AddAttribute("DioInterval",
-                          "Interval between periodic DIO transmissions from joined nodes.",
-                          TimeValue(Seconds(1.0)),
-                          MakeTimeAccessor(&Rpl::m_dioInterval),
-                          MakeTimeChecker())
+            .AddAttribute("DioIntervalMin",
+                          "RFC 6550 DIOIntervalMin. Trickle Imin is 2^DioIntervalMin milliseconds.",
+                          UintegerValue(3),
+                          MakeUintegerAccessor(&Rpl::m_dioIntervalMin),
+                          MakeUintegerChecker<uint8_t>(0, 20))
+            .AddAttribute("DioIntervalDoublings",
+                          "RFC 6550 DIOIntervalDoublings. Trickle Imax is Imin * 2^DioIntervalDoublings.",
+                          UintegerValue(20),
+                          MakeUintegerAccessor(&Rpl::m_dioIntervalDoublings),
+                          MakeUintegerChecker<uint8_t>(0, 20))
+            .AddAttribute("DioRedundancyConstant",
+                          "RFC 6550 DIORedundancyConstant k. Zero disables Trickle suppression.",
+                          UintegerValue(10),
+                          MakeUintegerAccessor(&Rpl::m_dioRedundancy),
+                          MakeUintegerChecker<uint16_t>())
             .AddAttribute("DisInterval",
                           "Interval between DIS probes while the node is unjoined.",
                           TimeValue(Seconds(0.5)),
@@ -92,7 +109,26 @@ Rpl::GetTypeId()
                           "DODAG Version Number advertised in DIO messages.",
                           UintegerValue(1),
                           MakeUintegerAccessor(&Rpl::m_versionNumber),
-                          MakeUintegerChecker<uint8_t>());
+                          MakeUintegerChecker<uint8_t>())
+            .AddAttribute("ModeOfOperation",
+                          "RFC 6550 MOP advertised by the root in DIO. Non-root nodes adopt the "
+                          "value from the DIO of their parent. 2 = Storing mode (DAO enabled).",
+                          EnumValue<ModeOfOperation>(ModeOfOperation::NO_DOWNWARD_ROUTES),
+                          MakeEnumAccessor<ModeOfOperation>(&Rpl::m_mop),
+                          MakeEnumChecker(ModeOfOperation::NO_DOWNWARD_ROUTES,
+                                          "NoDownwardRoutes",
+                                          ModeOfOperation::NON_STORING,
+                                          "NonStoring",
+                                          ModeOfOperation::STORING_NO_MULTICAST,
+                                          "StoringNoMulticast",
+                                          ModeOfOperation::STORING_WITH_MULTICAST,
+                                          "StoringWithMulticast"))
+            .AddAttribute("DaoDelay",
+                          "RFC 6550 DelayDAO: time between a route change and the DAO that "
+                          "advertises it (changes within this time are aggregated).",
+                          TimeValue(Seconds(1)),
+                          MakeTimeAccessor(&Rpl::m_daoDelay),
+                          MakeTimeChecker());
     return tid;
 }
 
@@ -101,8 +137,9 @@ Rpl::DoDispose()  //Dispose obhect
 {
     NS_LOG_FUNCTION(this);
 
-    m_dioTimerEvent.Cancel();
+    StopTrickle();
     m_disTimerEvent.Cancel();
+    m_daoTimerEvent.Cancel();
 
     for (auto& entry : m_sockets)
     {
@@ -131,6 +168,7 @@ Rpl::DoInitialize()
     m_initialized = true;  //Add RPL to available IFs(111-132)
 
     NS_ASSERT_MSG(m_ipv6, "SetIpv6 must be called before DoInitialize");
+    ConfigureTrickle();
 
     for (uint32_t i = 0; i < m_ipv6->GetNInterfaces(); ++i)
     {
@@ -170,7 +208,7 @@ Rpl::DoInitialize()
             }
         }
         m_rank = RPL_ROOT_RANK;
-        ScheduleNextDio();
+        StartTrickle();
     }
     else
     {
@@ -311,8 +349,17 @@ Rpl::NotifyAddAddress(uint32_t interface, Ipv6InterfaceAddress address)
 
     if (address.GetScope() == Ipv6InterfaceAddress::GLOBAL)
     {
-        Ipv6Address networkAddress = address.GetAddress().CombinePrefix(address.GetPrefix());
-        AddNetworkRouteTo(networkAddress, address.GetPrefix(), Ipv6Address::GetZero(), interface);
+        // on-link のときだけ「同一リンク（直接到達）」の /prefix ルートを入れる。
+        // route-over のマルチホップでは、同じ /64 に属するアドレスでも隣接とは限らない。
+        // on-link でないアドレスは DAO で学習した /128 の Downward ルートだけで到達する。
+        if (address.GetOnLink())
+        {
+            Ipv6Address networkAddress = address.GetAddress().CombinePrefix(address.GetPrefix());
+            AddNetworkRouteTo(networkAddress,
+                              address.GetPrefix(),
+                              Ipv6Address::GetZero(),
+                              interface);
+        }
 
         if (m_isRoot && m_dodagId.IsAny())
         {
@@ -340,7 +387,7 @@ Rpl::NotifyRemoveAddress(uint32_t interface, Ipv6InterfaceAddress address)
         return;
     }
 
-    if (address.GetScope() == Ipv6InterfaceAddress::GLOBAL)
+    if (address.GetScope() == Ipv6InterfaceAddress::GLOBAL && address.GetOnLink())
     {
         Ipv6Address networkAddress = address.GetAddress().CombinePrefix(address.GetPrefix());
         RemoveNetworkRoute(networkAddress, address.GetPrefix());
@@ -440,15 +487,12 @@ Rpl::SetRoot(bool isRoot)
             }
         }
         m_rank = RPL_ROOT_RANK;
-        if (!m_dioTimerEvent.IsPending())
-        {
-            ScheduleNextDio();
-        }
+        StartTrickle();
         m_disTimerEvent.Cancel();
     }
     else
     {
-        m_dioTimerEvent.Cancel();
+        StopTrickle();
         if (!m_joined)
         {
             ScheduleNextDis();
@@ -478,6 +522,18 @@ uint16_t
 Rpl::GetRank() const
 {
     return m_rank;
+}
+
+bool
+Rpl::HasDownwardRoute(Ipv6Address dest)
+{
+    Ptr<RplRoutingTableEntry> found;
+    if (!m_routingTable.LookUpEntry(dest, found))
+    {
+        return false;
+    }
+    return found->GetType() == RplRouteType::DOWNWARD &&
+           found->GetStatus() == RplRouteStatus::VALID;
 }
 
 void
@@ -575,6 +631,13 @@ Rpl::Receive(Ptr<Socket> socket)
         Ipv6Address dst = ipv6Hdr.GetDestination();
         Ipv6Address src = ipv6Hdr.GetSource().IsAny() ? srcFrom : ipv6Hdr.GetSource();
 
+        // ::（任意アドレス）にバインドした受信ソケットはユニキャストも拾う。ユニキャストは
+        // IF ごとのソケット（link-local にバインド）が受けるので、ここでは捨てて二重処理を防ぐ。
+        if (socket == m_multicastRecvSocket && !dst.IsMulticast())
+        {
+            continue;
+        }
+
         Icmpv6Header icmp;
         packet->RemoveHeader(icmp);
         if (icmp.GetType() != RPL_ICMPV6_TYPE)
@@ -591,6 +654,14 @@ Rpl::Receive(Ptr<Socket> socket)
         {
             HandleDis(packet, src, dst, incomingIf);
         }
+        else if (code == RplIcmpv6Code::DAO)
+        {
+            HandleDao(packet, src, dst, incomingIf);
+        }
+        else if (code == RplIcmpv6Code::DAO_ACK)
+        {
+            HandleDaoAck(packet, src, dst, incomingIf);
+        }
         else
         {
             NS_LOG_LOGIC("Ignore unimplemented RPL code " << int(icmp.GetCode()));
@@ -603,7 +674,7 @@ Rpl::HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t in
 {
     NS_LOG_FUNCTION(this << src << dst << interface);
 
-    if (IsLocalAddress(src) || m_isRoot)
+    if (IsLocalAddress(src))
     {
         return;
     }
@@ -626,9 +697,25 @@ Rpl::HandleDio(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t in
         return;
     }
 
+    // Root は親を持たない。同じ DODAG の DIO は Trickle の consistent として数える。
+    if (m_isRoot)
+    {
+        if (m_trickleStarted)
+        {
+            m_trickle.ConsistentEvent();
+        }
+        return;
+    }
+
     if (!m_joined || dio.GetRank() < m_parentRank)
     {
         AcceptParent(src, interface, dio);
+    }
+    else if (m_trickleStarted)
+    {
+        // 親も自 Rank も変えない DIO は consistent（\RFC{6550} Sec. 8.3, \RFC{6206} Sec. 4.2）。
+        // 近傍の DIO 数が k 以上なら、この周期の自 DIO 送信は抑制される。
+        m_trickle.ConsistentEvent();
     }
 }
 
@@ -662,6 +749,17 @@ Rpl::HandleDis(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t in
     std::cout << Simulator::Now().As(Time::S) << " [RPL DIS Rx] node=" << nodeId << " src=" << src
               << " dst=" << dst << " unicast=" << unicast << "\n";
 
+    // \RFC{6550} Sec. 8.3: マルチキャスト DIS は不整合イベント。Trickle を Imin に戻し、
+    // 直後（Imin/2 ～ Imin）の周期 DIO で応答する。ここで DIO は即送しない。
+    if (!unicast)
+    {
+        if (m_trickleStarted)
+        {
+            m_trickle.InconsistentEvent();
+        }
+        return;
+    }
+
     Ptr<Socket> socket = nullptr;
     for (const auto& entry : m_sockets)
     {
@@ -682,10 +780,8 @@ Rpl::HandleDis(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t in
         return;
     }
 
-    // \RFC{6550} Sec. 8.3 (simplified, no Trickle):
-    // unicast DIS -> unicast DIO; multicast DIS -> multicast DIO.
-    Ipv6Address replyDst = unicast ? src : RPL_ALL_NODES_MULTICAST;
-    SendDioOnInterface(interface, socket, replyDst);
+    // ユニキャスト DIS は Trickle に触れず、送信元へユニキャスト DIO を1回返す。
+    SendDioOnInterface(interface, socket, src);
 }
 
 void
@@ -715,11 +811,372 @@ Rpl::AcceptParent(Ipv6Address parent, uint32_t interface, const DioBaseObjectHea
               << " parent=" << m_preferredParent << " parentRank=" << m_parentRank
               << " myRank=" << m_rank << " DODAGID=" << m_dodagId << "\n";
 
-    // 初回参加時のみ、以降マルチホップ伝播用に自 DIO 送信を開始。
-    if (firstJoin && !m_dioTimerEvent.IsPending())
+    if (firstJoin)
     {
-        ScheduleNextDio();
+        // 初回参加：Imin から Trickle を開始し、次ホップへ DODAG 情報を素早く広げる。
+        StartTrickle();
     }
+    else if (m_trickleStarted)
+    {
+        // 親の切替で自 Rank が変わった：周囲に知らせるため Imin に戻す。
+        m_trickle.InconsistentEvent();
+    }
+
+    // 親が決まった（または変わった）ので、自分と配下の宛先を新しい親へ DAO で知らせる。
+    ScheduleDao();
+}
+
+bool
+Rpl::IsStoringMode() const
+{
+    return m_mop == ModeOfOperation::STORING_NO_MULTICAST ||
+           m_mop == ModeOfOperation::STORING_WITH_MULTICAST;
+}
+
+Ptr<Socket>
+Rpl::GetSocketForInterface(uint32_t interface) const
+{
+    for (const auto& entry : m_sockets)
+    {
+        if (entry.second == interface)
+        {
+            return entry.first;
+        }
+    }
+    return nullptr;
+}
+
+void
+Rpl::ScheduleDao()
+{
+    NS_LOG_FUNCTION(this);
+
+    if (m_isRoot || !m_joined || !IsStoringMode())
+    {
+        return;
+    }
+    if (m_daoTimerEvent.IsPending())
+    {
+        return; // DelayDAO 中の変更は 1 つの DAO にまとめる
+    }
+    m_daoTimerEvent = Simulator::Schedule(m_daoDelay, &Rpl::SendDao, this);
+}
+
+void
+Rpl::SendDao()
+{
+    NS_LOG_FUNCTION(this);
+
+    if (m_isRoot || !m_joined || m_preferredParent.IsAny() || !IsStoringMode())
+    {
+        return;
+    }
+
+    Ptr<Socket> socket = GetSocketForInterface(m_parentInterface);
+    Ipv6Address src = GetLinkLocalAddress(m_parentInterface);
+    if (!socket || src.IsAny())
+    {
+        NS_LOG_WARN("Cannot send DAO: no socket/link-local on parent interface");
+        return;
+    }
+
+    // Target = 自ノードの global アドレス + すでに保持している Downward ルートの宛先（Storing mode）
+    std::vector<std::pair<Ipv6Address, uint8_t>> targets;
+    for (uint32_t i = 0; i < m_ipv6->GetNInterfaces(); ++i)
+    {
+        for (uint32_t j = 0; j < m_ipv6->GetNAddresses(i); ++j)
+        {
+            Ipv6InterfaceAddress addr = m_ipv6->GetAddress(i, j);
+            if (addr.GetScope() == Ipv6InterfaceAddress::GLOBAL)
+            {
+                targets.emplace_back(addr.GetAddress(), 128);
+            }
+        }
+    }
+    for (const auto& entry : m_routingTable.GetEntries())
+    {
+        if (entry->GetType() == RplRouteType::DOWNWARD &&
+            entry->GetStatus() == RplRouteStatus::VALID)
+        {
+            targets.emplace_back(entry->GetDestination(), entry->GetPrefix().GetPrefixLength());
+        }
+    }
+    if (targets.empty())
+    {
+        return;
+    }
+
+    // Header は先頭に積まれるので、後ろのオプションから順に追加する。
+    // 最終形: [ICMPv6][DAO base][Target]...[Target][Transit Information]
+    Ptr<Packet> packet = Create<Packet>();
+
+    TransitInformationOptionHeader transit;
+    transit.SetPathSequence(++m_pathSequence);
+    transit.SetPathLifetime(0xFF); // infinite
+    packet->AddHeader(transit);
+
+    for (auto it = targets.rbegin(); it != targets.rend(); ++it)
+    {
+        RplTargetOptionHeader target;
+        target.SetTarget(it->first, it->second);
+        packet->AddHeader(target);
+    }
+
+    DaoBaseObjectHeader dao;
+    dao.SetRplInstanceId(m_rplInstanceId);
+    dao.SetK(true);
+    dao.SetDaoSequence(++m_daoSequence);
+    packet->AddHeader(dao);
+
+    Icmpv6Header icmp;
+    icmp.SetType(RPL_ICMPV6_TYPE);
+    icmp.SetCode(static_cast<uint8_t>(RplIcmpv6Code::DAO));
+    uint16_t payloadLen = icmp.GetSerializedSize() + packet->GetSize();
+    icmp.CalculatePseudoHeaderChecksum(src,
+                                       m_preferredParent,
+                                       payloadLen,
+                                       Ipv6Header::IPV6_ICMPV6);
+    packet->AddHeader(icmp);
+
+    SocketIpv6HopLimitTag hopLimitTag;
+    hopLimitTag.SetHopLimit(255);
+    packet->AddPacketTag(hopLimitTag);
+
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DAO Tx] node=" << GetObject<Node>()->GetId()
+              << " if=" << m_parentInterface << " src=" << src << " dst=" << m_preferredParent
+              << " seq=" << int(dao.GetDaoSequence()) << " K=1 targets=";
+    for (size_t k = 0; k < targets.size(); ++k)
+    {
+        std::cout << (k ? "," : "") << targets[k].first << "/" << int(targets[k].second);
+    }
+    std::cout << "\n";
+
+    int sent = socket->SendTo(packet, 0, Inet6SocketAddress(m_preferredParent, 0));
+    if (sent <= 0)
+    {
+        NS_LOG_WARN("DAO SendTo failed on interface " << m_parentInterface);
+    }
+}
+
+void
+Rpl::SendDaoAck(Ipv6Address dst, uint32_t interface, uint8_t daoSequence, uint8_t status)
+{
+    NS_LOG_FUNCTION(this << dst << interface << int(daoSequence) << int(status));
+
+    Ptr<Socket> socket = GetSocketForInterface(interface);
+    Ipv6Address src = GetLinkLocalAddress(interface);
+    if (!socket || src.IsAny())
+    {
+        return;
+    }
+
+    DaoAckBaseObjectHeader ack;
+    ack.SetRplInstanceId(m_rplInstanceId);
+    ack.SetDaoSequence(daoSequence);
+    ack.SetStatus(status);
+
+    Ptr<Packet> packet = Create<Packet>();
+    packet->AddHeader(ack);
+
+    Icmpv6Header icmp;
+    icmp.SetType(RPL_ICMPV6_TYPE);
+    icmp.SetCode(static_cast<uint8_t>(RplIcmpv6Code::DAO_ACK));
+    uint16_t payloadLen = icmp.GetSerializedSize() + ack.GetSerializedSize();
+    icmp.CalculatePseudoHeaderChecksum(src, dst, payloadLen, Ipv6Header::IPV6_ICMPV6);
+    packet->AddHeader(icmp);
+
+    SocketIpv6HopLimitTag hopLimitTag;
+    hopLimitTag.SetHopLimit(255);
+    packet->AddPacketTag(hopLimitTag);
+
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DAO-ACK Tx] node=" << GetObject<Node>()->GetId()
+              << " if=" << interface << " src=" << src << " dst=" << dst
+              << " seq=" << int(daoSequence) << " status=" << int(status) << "\n";
+
+    int sent = socket->SendTo(packet, 0, Inet6SocketAddress(dst, 0));
+    if (sent <= 0)
+    {
+        NS_LOG_WARN("DAO-ACK SendTo failed on interface " << interface);
+    }
+}
+
+void
+Rpl::HandleDao(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t interface)
+{
+    NS_LOG_FUNCTION(this << src << dst << interface);
+
+    if (IsLocalAddress(src) || dst.IsMulticast())
+    {
+        return;
+    }
+    if (!m_joined || !IsStoringMode())
+    {
+        NS_LOG_LOGIC("Ignore DAO: not joined or not in Storing mode");
+        return;
+    }
+
+    // D フラグ付きなら DODAGID(16B) も含めた長さが必要。
+    if (packet->GetSize() < 4)
+    {
+        NS_LOG_WARN("Drop DAO: too short size=" << packet->GetSize());
+        return;
+    }
+    uint8_t first[2];
+    packet->CopyData(first, 2);
+    const uint32_t baseSize = (first[1] & 0x40) ? 20 : 4;
+    if (packet->GetSize() < baseSize)
+    {
+        NS_LOG_WARN("Drop DAO: too short size=" << packet->GetSize());
+        return;
+    }
+
+    DaoBaseObjectHeader dao;
+    packet->RemoveHeader(dao);
+    if (dao.GetRplInstanceId() != m_rplInstanceId)
+    {
+        return;
+    }
+
+    // オプションを解析する。Transit Information は直前の Target 群に適用される。
+    struct Target
+    {
+        Ipv6Address address;
+        uint8_t prefixLength;
+        uint8_t pathLifetime;
+        uint8_t pathSequence;
+    };
+    std::vector<Target> targets;
+    size_t pendingFrom = 0; // まだ Transit Information が付いていない Target の先頭位置
+
+    while (packet->GetSize() > 0)
+    {
+        uint8_t type;
+        packet->CopyData(&type, 1);
+        if (type == static_cast<uint8_t>(DaoOptions::PAD1))
+        {
+            packet->RemoveAtStart(1);
+            continue;
+        }
+        if (packet->GetSize() < 2)
+        {
+            break;
+        }
+        uint8_t tl[2];
+        packet->CopyData(tl, 2);
+        const uint32_t total = 2u + tl[1];
+        if (packet->GetSize() < total)
+        {
+            break;
+        }
+
+        Ptr<Packet> option = packet->CreateFragment(0, total);
+        packet->RemoveAtStart(total);
+
+        if (type == static_cast<uint8_t>(DaoOptions::RPL_TARGET) && total >= 4)
+        {
+            RplTargetOptionHeader opt;
+            option->RemoveHeader(opt);
+            targets.push_back({opt.GetTarget(), opt.GetPrefixLength(), 0xFF, 0});
+        }
+        else if (type == static_cast<uint8_t>(DaoOptions::TRANSIT_INFORMATION) && total >= 6)
+        {
+            TransitInformationOptionHeader opt;
+            option->RemoveHeader(opt);
+            for (size_t k = pendingFrom; k < targets.size(); ++k)
+            {
+                targets[k].pathLifetime = opt.GetPathLifetime();
+                targets[k].pathSequence = opt.GetPathSequence();
+            }
+            pendingFrom = targets.size();
+        }
+        // それ以外（PadN, Target Descriptor など）は読み飛ばす
+    }
+
+    const uint32_t nodeId = GetObject<Node>()->GetId();
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DAO Rx] node=" << nodeId << " src=" << src
+              << " dst=" << dst << " seq=" << int(dao.GetDaoSequence()) << " K=" << dao.GetK()
+              << " targets=" << targets.size() << "\n";
+
+    bool changed = false;
+    for (const auto& t : targets)
+    {
+        if (IsLocalAddress(t.address) || t.address.IsLinkLocal() || t.address.IsMulticast())
+        {
+            continue;
+        }
+
+        Ipv6Prefix prefix(t.prefixLength);
+        Ptr<RplRoutingTableEntry> existing;
+        const bool found = m_routingTable.LookUpExact(t.address, prefix, existing);
+
+        if (t.pathLifetime == 0) // No-Path：経路の取り消し
+        {
+            if (found && existing->GetNextHop() == src)
+            {
+                m_routingTable.Delete(t.address, prefix);
+                changed = true;
+                std::cout << Simulator::Now().As(Time::S) << " [RPL Route] node=" << nodeId
+                          << " del DOWNWARD " << t.address << "/" << int(t.prefixLength)
+                          << " (No-Path from " << src << ")\n";
+            }
+            continue;
+        }
+
+        if (!found || existing->GetNextHop() != src || existing->GetInterface() != interface)
+        {
+            AddNetworkRouteTo(t.address, prefix, src, interface);
+            changed = true;
+            std::cout << Simulator::Now().As(Time::S) << " [RPL Route] node=" << nodeId
+                      << " add DOWNWARD " << t.address << "/" << int(t.prefixLength) << " via "
+                      << src << " if=" << interface << "\n";
+        }
+
+        if (m_routingTable.LookUpExact(t.address, prefix, existing))
+        {
+            existing->SetPathSequence(t.pathSequence);
+            existing->SetLifeTime(t.pathLifetime == 0xFF ? Time::Max()
+                                                         : Seconds(t.pathLifetime));
+        }
+    }
+
+    if (dao.GetK())
+    {
+        SendDaoAck(src, interface, dao.GetDaoSequence(), 0);
+    }
+
+    // 新しい宛先を覚えたら、自分の親にも伝える（root は終点なので不要）。
+    if (changed)
+    {
+        ScheduleDao();
+    }
+}
+
+void
+Rpl::HandleDaoAck(Ptr<Packet> packet, Ipv6Address src, Ipv6Address dst, uint32_t interface)
+{
+    NS_LOG_FUNCTION(this << src << dst << interface);
+
+    if (IsLocalAddress(src) || packet->GetSize() < 4)
+    {
+        return;
+    }
+    uint8_t first[2];
+    packet->CopyData(first, 2);
+    if (packet->GetSize() < ((first[1] & 0x80) ? 20u : 4u))
+    {
+        return;
+    }
+
+    DaoAckBaseObjectHeader ack;
+    packet->RemoveHeader(ack);
+    if (ack.GetRplInstanceId() != m_rplInstanceId)
+    {
+        return;
+    }
+
+    std::cout << Simulator::Now().As(Time::S) << " [RPL DAO-ACK Rx] node=" << GetObject<Node>()->GetId()
+              << " src=" << src << " seq=" << int(ack.GetDaoSequence())
+              << " status=" << int(ack.GetStatus()) << "\n";
 }
 
 void
@@ -879,7 +1336,6 @@ Rpl::SendDio()
     if (m_dodagId.IsAny())
     {
         NS_LOG_WARN("Cannot send DIO: DODAGID not set yet");
-        ScheduleNextDio();
         return;
     }
 
@@ -887,8 +1343,6 @@ Rpl::SendDio()
     {
         SendDioOnInterface(entry.second, entry.first, RPL_ALL_NODES_MULTICAST);
     }
-
-    ScheduleNextDio();
 }
 
 void
@@ -946,15 +1400,35 @@ Rpl::SendDioOnInterface(uint32_t interface, Ptr<Socket> socket, Ipv6Address dst)
 }
 
 void
-Rpl::ScheduleNextDio()
+Rpl::ConfigureTrickle()
 {
     NS_LOG_FUNCTION(this);
-    m_dioTimerEvent.Cancel();
-    // 参加後は非 root も含め周期 DIO（次ホップへの DODAG 情報伝播）。
-    if (m_joined && m_dioInterval.IsStrictlyPositive())
+    // Imin = 2^DIOIntervalMin ms（\RFC{6550} Sec. 8.3.1）。既定 8 ms。
+    // Imax = Imin × 2^DIOIntervalDoublings。既定は約 2.3 時間。
+    const uint32_t iminMs = 1u << m_dioIntervalMin;
+    m_trickle.SetParameters(MilliSeconds(iminMs), m_dioIntervalDoublings, m_dioRedundancy);
+    m_trickle.SetFunction(&Rpl::SendDio, this);
+}
+
+void
+Rpl::StartTrickle()
+{
+    NS_LOG_FUNCTION(this);
+    if (!m_joined || m_trickleStarted)
     {
-        m_dioTimerEvent = Simulator::Schedule(m_dioInterval, &Rpl::SendDio, this);
+        return;
     }
+    // Enable() は最初の周期を [Imin, Imax] から選ぶ。参加直後は Imin から始めたいので Reset()。
+    m_trickle.Reset();
+    m_trickleStarted = true;
+}
+
+void
+Rpl::StopTrickle()
+{
+    NS_LOG_FUNCTION(this);
+    m_trickle.Stop();
+    m_trickleStarted = false;
 }
 
 Ipv6Address
@@ -1018,6 +1492,38 @@ Rpl::Lookup(Ipv6Address dest, bool setSource, Ptr<NetDevice> oif)
     if (oif)
     {
         oifIndex = m_ipv6->GetInterfaceForDevice(oif);
+    }
+
+    // リンクローカル・ユニキャストは常に on-link（ルーティングテーブルには載せない）。
+    // DAO/DAO-ACK や ND（NA 応答）など、隣接ノード宛の送信に使う。
+    if (dest.IsLinkLocal())
+    {
+        int32_t linkIf = oifIndex;
+        if (linkIf < 0)
+        {
+            // 出力デバイス指定がなければ、最初の非ループバック IF を使う。
+            for (uint32_t i = 0; i < m_ipv6->GetNInterfaces(); ++i)
+            {
+                if (!DynamicCast<LoopbackNetDevice>(m_ipv6->GetNetDevice(i)))
+                {
+                    linkIf = static_cast<int32_t>(i);
+                    break;
+                }
+            }
+        }
+        if (linkIf < 0)
+        {
+            return nullptr;
+        }
+        rtentry = Create<Ipv6Route>();
+        if (setSource)
+        {
+            rtentry->SetSource(m_ipv6->SourceAddressSelection(linkIf, dest));
+        }
+        rtentry->SetDestination(dest);
+        rtentry->SetGateway(Ipv6Address::GetZero());
+        rtentry->SetOutputDevice(m_ipv6->GetNetDevice(linkIf));
+        return rtentry;
     }
 
     Ptr<RplRoutingTableEntry> found;
