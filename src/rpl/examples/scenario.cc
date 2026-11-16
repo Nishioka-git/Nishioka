@@ -12,9 +12,8 @@
  * topology.  Downward routes: Storing mode (MOP 2).  After joining, Node2 and
  * Node1 send unicast DAO so that Node0 learns Node2 via Node1.
  *
- * After RPL converges, a small UDP probe checks both directions:
- *   upward   Node2 -> Node0  (default route via Node1)
- *   downward Node0 -> Node2  (DAO DOWNWARD via Node1)
+ * After RPL converges, each endpoint (Node0 / Node2) has one UDP socket
+ * used for both send and receive.  Probes: Node2->Node0 and Node0->Node2.
  */
 
 #include "ns3/core-module.h"
@@ -37,8 +36,9 @@ constexpr uint16_t kPanId = 5;
 constexpr uint16_t kDataPort = 9;
 constexpr uint32_t kPayloadBytes = 16;
 
-bool g_upwardRx = false;
-bool g_downwardRx = false;
+// 端点ノードの UDP 受信成否（経路の上り/下り用に Socket を分けているわけではない）
+bool g_node0Rx = false;
+bool g_node2Rx = false;
 
 Ptr<Rpl>
 GetRpl(Ptr<Node> node)
@@ -68,37 +68,36 @@ PrintNodeState(Ptr<Node> node, const std::string& label)
 }
 
 void
-RecvUpward(Ptr<Socket> socket)
+RecvOnNode(Ptr<Socket> socket, uint32_t nodeId, bool* received)
 {
     Address from;
     while (Ptr<Packet> packet = socket->RecvFrom(from))
     {
         Inet6SocketAddress src = Inet6SocketAddress::ConvertFrom(from);
-        std::cout << Simulator::Now().As(Time::S) << " [Data Rx] upward Node0 from=" << src.GetIpv6()
-                  << " size=" << packet->GetSize() << "\n";
-        g_upwardRx = true;
+        std::cout << Simulator::Now().As(Time::S) << " [Data Rx] Node" << nodeId
+                  << " from=" << src.GetIpv6() << " size=" << packet->GetSize() << "\n";
+        *received = true;
     }
 }
 
+// SetRecvCallback は Callback<void, Ptr<Socket>> のみ。束縛はラッパで行う。
 void
-RecvDownward(Ptr<Socket> socket)
+RecvOnNode0(Ptr<Socket> socket)
 {
-    Address from;
-    while (Ptr<Packet> packet = socket->RecvFrom(from))
-    {
-        Inet6SocketAddress src = Inet6SocketAddress::ConvertFrom(from);
-        std::cout << Simulator::Now().As(Time::S)
-                  << " [Data Rx] downward Node2 from=" << src.GetIpv6()
-                  << " size=" << packet->GetSize() << "\n";
-        g_downwardRx = true;
-    }
+    RecvOnNode(socket, 0, &g_node0Rx);
 }
 
 void
-SendUdp(Ptr<Socket> socket, Ipv6Address dst, const std::string& direction)
+RecvOnNode2(Ptr<Socket> socket)
+{
+    RecvOnNode(socket, 2, &g_node2Rx);
+}
+
+void
+SendUdp(Ptr<Socket> socket, Ipv6Address dst, const std::string& fromTo)
 {
     Ptr<Packet> packet = Create<Packet>(kPayloadBytes);
-    std::cout << Simulator::Now().As(Time::S) << " [Data Tx] " << direction << " dst=" << dst
+    std::cout << Simulator::Now().As(Time::S) << " [Data Tx] " << fromTo << " dst=" << dst
               << " size=" << kPayloadBytes << "\n";
     socket->SendTo(packet, 0, Inet6SocketAddress(dst, kDataPort));
 }
@@ -155,7 +154,7 @@ main(int argc, char** argv)
                                          DoubleValue(100.0));
     NetDeviceContainer lrwpanDevices = lrWpanHelper.Install(nodes);
 
-    // MLME-SET で PAN ID と短縮アドレス 00:01, 00:02, 00:03 を決める。
+    // MLME-SET で PAN ID と短縮アドレス Mac16Address(1), (2), ... を決める。
     // 6LoWPAN / IPv6 の IID は MAC の GetAddress()（短縮アドレス由来）から決まる。
     for (uint32_t i = 0; i < lrwpanDevices.GetN(); ++i)
     {
@@ -165,9 +164,8 @@ main(int argc, char** argv)
         panAttr->macPanId = kPanId;
         mac->MlmeSetRequest(MacPibAttributeIdentifier::macPanId, panAttr);
 
-        static const char* const shortAddrs[] = {"00:01", "00:02", "00:03"};
         Ptr<MacPibAttributes> shortAttr = Create<MacPibAttributes>();
-        shortAttr->macShortAddress = Mac16Address(shortAddrs[i]);
+        shortAttr->macShortAddress = Mac16Address(static_cast<uint16_t>(i + 1));
         mac->MlmeSetRequest(MacPibAttributeIdentifier::macShortAddress, shortAttr);
     }
 
@@ -176,10 +174,17 @@ main(int argc, char** argv)
     internetv6.SetRoutingHelper(rplHelper);
     internetv6.Install(nodes);
 
-    Ptr<Rpl> rpl0 = GetRpl(nodes.Get(0));
-    Ptr<Rpl> rpl1 = GetRpl(nodes.Get(1));
-    Ptr<Rpl> rpl2 = GetRpl(nodes.Get(2));
-    NS_ABORT_MSG_UNLESS(rpl0 && rpl1 && rpl2, "RPL routing protocol was not installed");
+    std::vector<Ptr<Rpl>> rpls;
+    rpls.reserve(nodes.GetN());
+    for (uint32_t i = 0; i < nodes.GetN(); ++i)
+    {
+        Ptr<Rpl> rpl = GetRpl(nodes.Get(i));
+        NS_ABORT_MSG_UNLESS(rpl, "RPL routing protocol was not installed on node " << i);
+        rpls.push_back(rpl);
+    }
+    Ptr<Rpl> rpl0 = rpls[0];
+    Ptr<Rpl> rpl1 = rpls[1];
+    Ptr<Rpl> rpl2 = rpls[2];
     rpl0->SetRoot(true);
     rpl0->SetAttribute("ModeOfOperation",
                        EnumValue<ModeOfOperation>(ModeOfOperation::STORING_NO_MULTICAST));
@@ -199,44 +204,47 @@ main(int argc, char** argv)
     const Ipv6Address n1Addr = deviceInterfaces.GetAddress(1, 1);
     const Ipv6Address n2Addr = deviceInterfaces.GetAddress(2, 1);
 
+    // 端点ノードごとに UDP Socket を 1 つずつ持つ（送受信兼用。上り/下りで分けない）。
     TypeId udpTid = TypeId::LookupByName("ns3::UdpSocketFactory");
-    Ptr<Socket> sock0 = Socket::CreateSocket(nodes.Get(0), udpTid);
-    Ptr<Socket> sock2 = Socket::CreateSocket(nodes.Get(2), udpTid);
-    sock0->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), kDataPort));
-    sock2->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), kDataPort));
-    sock0->SetRecvCallback(MakeCallback(&RecvUpward));
-    sock2->SetRecvCallback(MakeCallback(&RecvDownward));
+    Ptr<Socket> sockNode0 = Socket::CreateSocket(nodes.Get(0), udpTid);
+    Ptr<Socket> sockNode2 = Socket::CreateSocket(nodes.Get(2), udpTid);
+    sockNode0->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), kDataPort));
+    sockNode2->Bind(Inet6SocketAddress(Ipv6Address::GetAny(), kDataPort));
+    sockNode0->SetRecvCallback(MakeCallback(&RecvOnNode0));
+    sockNode2->SetRecvCallback(MakeCallback(&RecvOnNode2));
 
-    // DAO 完了後に上り・下りを 1 パケットずつ送る（N0-N2 は無線的に非隣接）。
+    // DAO 完了後に端点同士で 1 パケットずつ送る（N0-N2 は無線的に非隣接）。
     const Time dataTime = Seconds(lateJoin + 6.0);
-    Simulator::Schedule(dataTime, &SendUdp, sock2, n0Addr, std::string("upward Node2->Node0"));
+    Simulator::Schedule(dataTime, &SendUdp, sockNode2, n0Addr, std::string("Node2->Node0"));
     Simulator::Schedule(dataTime + MilliSeconds(100),
                         &SendUdp,
-                        sock0,
+                        sockNode0,
                         n2Addr,
-                        std::string("downward Node0->Node2"));
+                        std::string("Node0->Node2"));
 
     std::cout << "Topology: Node0(root) --80m-- Node1 --80m-- Node2 (MaxRange=100m)\n"
               << "MAC PAN ID / short addresses set via MLME-SET; IPv6 IID follows the MAC.\n"
               << "RPL : Trickle DIO (Imin=8ms, doublings=20, k=10); MOP=2 (Storing) DAO.\n"
-              << "Data: UDP upward N2->N0 and downward N0->N2 after RPL converges.\n"
+              << "Data: one UDP socket per endpoint; Node2->Node0 and Node0->Node2 after join.\n"
               << "Expect: N1 parent=N0 Rank2, N2 parent=N1 Rank3; Node0 DOWNWARD to N2 via N1.\n\n";
     PrintMacAndIpv6(lrwpanDevices, deviceInterfaces);
     std::cout << "\n";
 
     const Time simTime = Seconds(10 + lateJoin);
     Ptr<OutputStreamWrapper> stream = Create<OutputStreamWrapper>(&std::cout);
-    Simulator::Schedule(simTime, &Rpl::PrintRoutingTable, rpl0, stream, Time::S);
-    Simulator::Schedule(simTime, &Rpl::PrintRoutingTable, rpl1, stream, Time::S);
-    Simulator::Schedule(simTime, &Rpl::PrintRoutingTable, rpl2, stream, Time::S);
+    for (uint32_t i = 0; i < rpls.size(); ++i)
+    {
+        Simulator::Schedule(simTime, &Rpl::PrintRoutingTable, rpls[i], stream, Time::S);
+    }
 
     Simulator::Stop(simTime + MicroSeconds(1));
     Simulator::Run();
 
     std::cout << "\n=== Final RPL state ===\n";
-    PrintNodeState(nodes.Get(0), "Node0");
-    PrintNodeState(nodes.Get(1), "Node1");
-    PrintNodeState(nodes.Get(2), "Node2");
+    for (uint32_t i = 0; i < nodes.GetN(); ++i)
+    {
+        PrintNodeState(nodes.Get(i), "Node" + std::to_string(i));
+    }
 
     std::cout << "\n=== DAO downward routes ===\n"
               << "  Node0 has DOWNWARD to N1: " << rpl0->HasDownwardRoute(n1Addr) << "\n"
@@ -244,8 +252,8 @@ main(int argc, char** argv)
               << "  Node1 has DOWNWARD to N2: " << rpl1->HasDownwardRoute(n2Addr) << "\n";
 
     std::cout << "\n=== Data plane (UDP) ===\n"
-              << "  upward   Node2->Node0: " << (g_upwardRx ? "OK" : "NG") << "\n"
-              << "  downward Node0->Node2: " << (g_downwardRx ? "OK" : "NG") << "\n";
+              << "  Node0 received (from Node2): " << (g_node0Rx ? "OK" : "NG") << "\n"
+              << "  Node2 received (from Node0): " << (g_node2Rx ? "OK" : "NG") << "\n";
 
     const bool pass =
         rpl0->HasDownwardRoute(n1Addr) && rpl0->HasDownwardRoute(n2Addr) &&
@@ -253,7 +261,7 @@ main(int argc, char** argv)
         rpl0->GetRank() == 1 && rpl1->IsJoined() && rpl1->GetRank() == 2 &&
         !rpl1->GetPreferredParent().IsAny() && rpl2->IsJoined() && rpl2->GetRank() == 3 &&
         !rpl2->GetPreferredParent().IsAny() &&
-        rpl2->GetPreferredParent() != rpl1->GetPreferredParent() && g_upwardRx && g_downwardRx;
+        rpl2->GetPreferredParent() != rpl1->GetPreferredParent() && g_node0Rx && g_node2Rx;
 
     std::cout << "\n";
     if (pass)
