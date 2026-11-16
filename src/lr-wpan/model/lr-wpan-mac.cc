@@ -947,7 +947,7 @@ LrWpanMac::MlmeSetRequest(MacPibAttributeIdentifier id, Ptr<MacPibAttributes> at
         confirmParams.m_status = MacStatus::READ_ONLY;
         break;
     case macPanId:
-        m_macPanId = macPanId;
+        m_macPanId = attribute->macPanId;
         break;
     case macPromiscuousMode:
         m_macPromiscuousMode = attribute->macPromiscuousMode;
